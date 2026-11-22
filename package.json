@@ -1,0 +1,14 @@
+{
+  "name": "pilot-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Pilot Web — platform app (weekly tasks in docs/tasks.md)",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "render:signin": "node scripts/render-signin.mjs"
+  }
+}

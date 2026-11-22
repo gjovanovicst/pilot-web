@@ -1,0 +1,23 @@
+/*
+ * Pilot Web — design system v1 tokens
+ * (sha256 ec2a40a0a185ef454f9da603b438ab0e30623806c213a66f4747f48589ff363a)
+ *
+ * This is the ONLY file in the repository allowed to contain raw colour,
+ * radius, spacing or typography values. Everything else must reference these
+ * custom properties with var(--token).
+ *
+ * The token set is pinned by src/pages/SignIn.test.ts, which fails if a token
+ * is added, removed or re-valued.
+ */
+
+:root {
+  --color-brand: #4f5eea;
+  --color-bg-canvas: #fbfbfd;
+  --color-bg-surface: #ffffff;
+  --color-text-primary: #101223;
+  --color-text-secondary: #5b5f7b;
+  --color-danger: #d92d20;
+  --radius-md: 6px;
+  --space-4: 16px;
+  --font-sans: Inter, system-ui, sans-serif;
+}

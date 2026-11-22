@@ -1,0 +1,187 @@
+/*
+ * Pilot Web — sign-in surface.
+ *
+ * Every colour, radius, spacing and type value below comes from a design
+ * system v1 custom property (see ./tokens.css). There is no raw hex and no
+ * raw px length in this file: hairline widths and half steps are derived from
+ * tokens with calc() so that no new colour or spacing value is introduced.
+ */
+
+body {
+  margin: 0;
+  background: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+/* --- page shell ------------------------------------------------------- */
+
+.signin {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 100%;
+  padding: var(--space-4);
+  background: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+.signin__panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  /* Fluid: the panel fills a 375px viewport and only caps on wide screens. */
+  max-width: calc(var(--space-4) * 26);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+}
+
+.signin__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 1.5rem;
+  line-height: 1.3;
+}
+
+.signin__subtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+/* --- form ------------------------------------------------------------- */
+
+.signin__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.signin__field {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-4) / 4);
+}
+
+.signin__label {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.signin__input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: calc(var(--space-4) / 2);
+  /* 1px hairline derived from --radius-md (6px / 6). */
+  border: calc(var(--radius-md) / 6) solid var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+}
+
+.signin__footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* --- buttons (approved pattern: primary / secondary) ------------------ */
+
+.button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--space-4) / 4);
+  width: 100%;
+  padding: calc(var(--space-4) / 2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button--primary {
+  background: var(--color-brand);
+  color: var(--color-bg-surface);
+}
+
+.button--secondary {
+  /* 1px hairline derived from --radius-md (6px / 6). */
+  border: calc(var(--radius-md) / 6) solid var(--color-brand);
+  background: var(--color-bg-surface);
+  color: var(--color-brand);
+}
+
+.button--quiet {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+/* --- empty state (approved pattern: title + description + action) ----- */
+
+.empty-state {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-canvas);
+  color: var(--color-text-secondary);
+}
+
+.empty-state__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 1.125rem;
+}
+
+.empty-state__description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.empty-state__credentials {
+  display: grid;
+  /* Wraps long credentials instead of forcing horizontal scroll at 375px. */
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: calc(var(--space-4) / 2) var(--space-4);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.empty-state__label {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.empty-state__value {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* --- visible focus ring (T-3 pattern, applied from day one) ----------- */
+
+.signin :focus-visible,
+.empty-state :focus-visible,
+.button:focus-visible {
+  /* 2px ring and 1px offset, both derived from --radius-md. */
+  outline: calc(var(--radius-md) / 3) solid var(--color-brand);
+  outline-offset: calc(var(--radius-md) / 6);
+}

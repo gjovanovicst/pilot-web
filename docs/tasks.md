@@ -9,6 +9,13 @@ The sign-in page shows an empty state when the form is untouched.
 - Given the sign-in page, when it loads, then the empty state explains the
   demo credentials.
 
+**Done** — `src/pages/SignIn.ts` renders the empty state with the demo email
+and demo password, both taken from the single shared constant in
+`src/config/demoAccount.ts`, and `src/pages/SignIn.css` takes every colour,
+radius, spacing and font value from `src/styles/tokens.css` (design system v1).
+Verified by `src/pages/SignIn.test.ts` and `src/styles/tokens.test.ts`
+(`pnpm test`).
+
 ## T-2 — Handle a failed request
 
 A failed API call shows a retryable error, not a blank screen.

@@ -1,0 +1,17 @@
+/**
+ * Pilot Web — platform design system v1.
+ *
+ * This file is the only place in the codebase allowed to hold raw values.
+ * Every other stylesheet consumes these tokens with var(--token).
+ */
+:root {
+  --color-brand: #4f5eea;
+  --color-bg-canvas: #fbfbfd;
+  --color-bg-surface: #ffffff;
+  --color-text-primary: #101223;
+  --color-text-secondary: #5b5f7b;
+  --color-danger: #d92d20;
+  --radius-md: 6px;
+  --space-4: 16px;
+  --font-sans: Inter, system-ui, sans-serif;
+}

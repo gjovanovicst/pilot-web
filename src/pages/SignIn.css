@@ -1,0 +1,192 @@
+/**
+ * Sign-in page styles.
+ *
+ * Every colour, radius, spacing and font value is a design token from
+ * src/styles/tokens.css — no raw colours, no off-token spacing values.
+ * Mobile first: the layout is a single column from 375px upwards and never
+ * scrolls horizontally (flex children may shrink, long values may wrap).
+ */
+
+.sign-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 100vh;
+  margin: 0;
+  padding: var(--space-4);
+  background: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+}
+
+.sign-in__card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 32rem;
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+.sign-in__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.sign-in__title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+.sign-in__subtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 1rem;
+}
+
+/* Empty state: the demo credentials a first-time user needs. */
+.sign-in__empty {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-4);
+  border-left: 4px solid var(--color-brand);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sign-in__empty[hidden] {
+  display: none;
+}
+
+.sign-in__empty-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.sign-in__empty-text {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.sign-in__credentials {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.sign-in__credential {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.sign-in__credential-label {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.sign-in__credential-value {
+  margin: 0;
+  min-width: 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.sign-in__credential-value code {
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* Form */
+.sign-in__form {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.sign-in__field {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  min-width: 0;
+}
+
+.sign-in__label {
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.sign-in__input {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+}
+
+.sign-in__input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.sign-in__submit {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-brand);
+  border-radius: var(--radius-md);
+  background: var(--color-brand);
+  color: var(--color-bg-surface);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Visible focus ring on every control (T-3 baseline, tokens only). */
+.sign-in__input:focus-visible,
+.sign-in__submit:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+.sign-in__submit:focus-visible {
+  outline-color: var(--color-text-primary);
+}

@@ -4,15 +4,33 @@ import { useState } from "react";
 
 export const DEMO_EMAIL = "demo@pilot.example";
 
-/** The sign-in form. It renders the last result as a plain text line. */
+/**
+ * The sign-in form. It renders the last result as a plain text line and shows an
+ * empty state naming the demo account until the form is touched.
+ */
 export function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [result, setResult] = useState("");
 
+  // The form is untouched until the user types or submits, so the empty state
+  // only describes the demo account while there is nothing else to go on.
+  const isUntouched = email === "" && password === "" && result === "";
+
   return (
     <main className="page">
       <h1>Sign in</h1>
+      {isUntouched ? (
+        <section className="signin-empty-state" aria-labelledby="signin-empty-state-heading">
+          <h2 id="signin-empty-state-heading">No account details yet</h2>
+          <p>
+            Demo account: <strong>{DEMO_EMAIL}</strong>
+          </p>
+          <p>
+            The demo sign-in only checks the email address, so any password will do.
+          </p>
+        </section>
+      ) : null}
       <form
         onSubmit={(event) => {
           event.preventDefault();

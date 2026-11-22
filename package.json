@@ -8,6 +8,6 @@
     "node": ">=22.6.0"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test src/pages/SignIn.test.ts"
+    "test": "node --experimental-strip-types --test \"src/**/*.test.ts\""
   }
 }

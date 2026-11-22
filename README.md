@@ -15,7 +15,8 @@ comes from the design-system v1 tokens.
 | `src/constants/demoCredentials.ts` | Single source of truth for the demo account. |
 | `src/components/EmptyState.ts` | The approved empty-state pattern (title, description, optional content). |
 | `src/pages/SignIn.ts` | The sign-in page: empty state while the form is untouched. |
-| `src/pages/SignIn.test.ts` | The acceptance tests for T-1. |
+| `src/pages/SignIn.test.ts` | Tokens, layout, accessibility and escaping tests for the surface. |
+| `src/pages/SignIn.empty-state.test.ts` | The behaviour under review: the empty state names both demo credentials on load, and is suppressed as soon as a credential is supplied. |
 | `.prettierrc.json` | Markup formatting: 100-column lines, one attribute per line. |
 
 ## Running the tests
@@ -25,7 +26,8 @@ pnpm test      # or: npm test
 ```
 
 The suite runs on Node's built-in test runner (`node --test`), so it needs no
-third-party packages.
+third-party packages. `npm test` globs `src/**/*.test.ts`, so a new test file
+next to the page is picked up without touching `package.json`.
 
 ## Formatting
 
@@ -58,6 +60,12 @@ behavioural test.
   fallback) so mobile browser chrome cannot make it overflow. The focus ring is
   declared only for the controls the surface actually renders — the sign-in page
   has no links, so an `a:focus-visible` rule would be dead CSS.
+- The empty-state behaviour is asserted in `src/pages/SignIn.empty-state.test.ts`
+  against the rendered markup only: the demo email is read as the value paired
+  with the `Email` term and the demo password as the value paired with the
+  `Password` term, so a credential that is merely present somewhere in the page
+  does not count as named, and the suppression cases cover email-only,
+  password-only, both, and the touched flag.
 - Markup stays readable in a diff: short elements sit on one source line, wide
   elements (the email and password inputs) wrap with one complete attribute per
   line via the `openTag`/`indent` helpers in `src/pages/SignIn.ts`, and an

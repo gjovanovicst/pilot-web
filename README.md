@@ -39,3 +39,12 @@ third-party packages.
 - `SidePanel`, `ConfirmDialog` and `PromptDialog` are not in this repository, so
   they were not re-implemented. The sign-in page is a route-level surface, not a
   form opened from a list, so the drawer pattern does not apply to it.
+- Vertical rhythm: design system v1 pins a single spacing step (`--space-4`), so
+  `app.css` uses two levels instead of one flat gap — `0` inside a group (a
+  heading and its description, a label and its input, a term and its value) and
+  `var(--space-4)` between groups. Adding a second spacing token is out of scope
+  for the pinned token set, so keep new surfaces on the same two levels.
+- The page shell sizes itself with `min-height: 100dvh` (preceded by a `100vh`
+  fallback) so mobile browser chrome cannot make it overflow. The focus ring is
+  declared only for the controls the surface actually renders — the sign-in page
+  has no links, so an `a:focus-visible` rule would be dead CSS.

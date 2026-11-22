@@ -3,11 +3,20 @@
  * Every colour, radius, spacing and font value comes from the design-system v1
  * tokens declared in tokens.css: no raw colour values, no off-scale spacing.
  * The layout is single column and fluid, so it stays usable from 375px up.
+ *
+ * Vertical rhythm: design system v1 pins a single spacing step (--space-4), so
+ * the surface uses two deliberate levels rather than one flat gap — `0` inside
+ * a group (a heading and its description, a term and its value, a label and its
+ * input) and var(--space-4) between groups.
  */
 
 .page {
   box-sizing: border-box;
+  /* 100dvh follows the visible viewport, so the page does not overflow under
+   * the mobile browser chrome. 100vh stays first as a fallback for engines
+   * without dvh support: they drop the second declaration and keep the first. */
   min-height: 100vh;
+  min-height: 100dvh;
   padding: var(--space-4);
   background-color: var(--color-bg-canvas);
   color: var(--color-text-primary);
@@ -33,6 +42,7 @@
   color: var(--color-danger);
 }
 
+/* A new group: separated from the heading above it. */
 .empty-state {
   margin: var(--space-4) 0 0;
   padding: var(--space-4);
@@ -46,48 +56,67 @@
   color: var(--color-text-primary);
 }
 
+/* Tight under its title: the title and the description are one group. */
 .empty-state__description {
-  margin: var(--space-4) 0 0;
+  margin: 0;
   color: var(--color-text-secondary);
 }
 
+/* The credentials are their own group, separated from the description. */
 .empty-state__extra {
   margin: var(--space-4) 0 0;
 }
 
 .credentials {
-  margin: var(--space-4) 0 0;
+  margin: 0;
   padding: 0;
+  color: var(--color-text-primary);
 }
 
 .credentials__term {
+  margin: 0;
   color: var(--color-text-secondary);
 }
 
+/* Tight under its term: the term and the value are one group. */
 .credentials__value {
-  margin: var(--space-4) 0 0;
+  margin: 0;
   overflow-wrap: anywhere;
   color: var(--color-text-primary);
 }
 
+/* Only the start of the next credential is separated, so the two name/value
+ * pairs read as two groups instead of four evenly spaced lines. */
+.credentials__value + .credentials__term {
+  margin: var(--space-4) 0 0;
+}
+
+/* A new group: separated from the empty state (or the heading) above it. */
 .sign-in__form {
   margin: var(--space-4) 0 0;
 }
 
 .field {
+  margin: 0;
+}
+
+/* Separated from the field above it. */
+.field + .field {
   margin: var(--space-4) 0 0;
 }
 
 .field__label {
   display: block;
+  margin: 0;
   color: var(--color-text-primary);
 }
 
+/* Tight under its label: a label and its input are one group. */
 .field__input {
   box-sizing: border-box;
   display: block;
   width: 100%;
-  margin: var(--space-4) 0 0;
+  margin: 0;
   padding: var(--space-4);
   border: 1px solid var(--color-text-secondary);
   border-radius: var(--radius-md);
@@ -97,22 +126,26 @@
 }
 
 .button {
+  display: inline-block;
   border-radius: var(--radius-md);
   font-family: var(--font-sans);
   cursor: pointer;
 }
 
+/* A new group: separated from the last field. */
 .button--primary {
   margin: var(--space-4) 0 0;
   padding: var(--space-4);
+  border: 1px solid var(--color-brand);
   border-radius: var(--radius-md);
   background-color: var(--color-brand);
   color: var(--color-bg-surface);
   font-family: var(--font-sans);
 }
 
-/* Accessibility: every interactive element shows a visible focus ring. */
-.sign-in a:focus-visible,
+/* Accessibility: every interactive element shows a visible focus ring.
+ * Only the controls this surface actually renders are styled — the sign-in
+ * page renders no links, so an `a:focus-visible` rule would be dead CSS. */
 .sign-in button:focus-visible,
 .sign-in input:focus-visible {
   outline: 2px solid var(--color-brand);

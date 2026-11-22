@@ -29,8 +29,11 @@ function parseTokens(css: string): Map<string, string> {
 }
 
 function cssRules(css: string): Array<{ selectors: string[]; body: string }> {
+  // Comments are stripped first so a rule's selector list is never polluted by
+  // the documentation comment above it.
+  const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const rules: Array<{ selectors: string[]; body: string }> = [];
-  for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+  for (const match of withoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const selectors = match[1]
       .split(',')
       .map((selector) => selector.trim())
@@ -46,6 +49,22 @@ function declarations(body: string): Array<{ property: string; value: string }> 
     found.push({ property: match[1].trim().toLowerCase(), value: match[2].trim() });
   }
   return found;
+}
+
+/** The declarations a single rule (looked up by its exact selector) sets. */
+function ruleDeclarations(selector: string): Array<{ property: string; value: string }> {
+  const rules = cssRules(readSource('src/styles/app.css'));
+  const rule = rules.find((candidate) => candidate.selectors.includes(selector));
+  assert.ok(rule, `${selector} is styled in src/styles/app.css`);
+  return declarations(rule.body);
+}
+
+function spacingValue(selector: string, property: string): string {
+  const value = ruleDeclarations(selector).find(
+    (declaration) => declaration.property === property,
+  )?.value;
+  assert.ok(value, `${selector} sets ${property}`);
+  return value;
 }
 
 const COLOR_PROPERTIES = new Set([
@@ -302,9 +321,25 @@ function TestSignInFormControlsAreLabelledAndFocusable() {
       `${rule.selectors.join(', ')} draws its focus ring with var(--color-brand)`,
     );
   }
-  const focusSelectors = focusRules.flatMap((rule) => rule.selectors).join(' ');
-  for (const control of ['input', 'button', 'a']) {
-    assert.ok(focusSelectors.includes(control), `${control} elements get the visible focus ring`);
+
+  // The focus ring must cover exactly the interactive elements the page
+  // renders: every rendered control gets a ring, and no rule targets an element
+  // that never renders (the sign-in page has no links, so an `a:focus-visible`
+  // rule would be dead CSS).
+  const renderedTags = new Set(
+    [...html.matchAll(/<([a-z][a-z0-9]*)\b/g)].map((match) => match[1].toLowerCase()),
+  );
+  const focusSelectors = focusRules.flatMap((rule) => rule.selectors).join(', ');
+  for (const control of ['a', 'button', 'input', 'select', 'textarea']) {
+    const renders = renderedTags.has(control);
+    const ringDeclared = new RegExp(`(?:^|[\\s,>+~])${control}(?![a-z0-9-])`).test(focusSelectors);
+    assert.equal(
+      ringDeclared,
+      renders,
+      renders
+        ? `${control} elements render, so they get the visible focus ring`
+        : `${control} elements never render, so the stylesheet must not declare a dead focus rule for them`,
+    );
   }
 }
 
@@ -321,6 +356,94 @@ function TestSignInSpacingUsesDesignTokens() {
       assert.ok(
         allowed,
         `${rule.selectors.join(', ')} { ${property}: ${value} } is off the design-system spacing scale`,
+      );
+    }
+  }
+}
+
+/**
+ * Review fix: one spacing token for every margin and padding read as a flat
+ * rhythm. Related content is now tight (0) inside a group, and only separate
+ * groups use the spacing step.
+ */
+function TestSignInGroupsRelatedContentWithAVerticalRhythm() {
+  const tight: Array<[string, string]> = [
+    ['.sign-in__heading', 'the heading owns no separation of its own'],
+    ['.empty-state__title', 'the empty-state title and its description are one group'],
+    ['.empty-state__description', 'the description sits tight under its title'],
+    ['.field', 'a field only separates itself from the previous field'],
+    ['.field__label', 'the label sits tight above its input'],
+    ['.field__input', 'the input sits tight under its label'],
+    ['.credentials__term', 'a term sits tight above its value'],
+    ['.credentials__value', 'a value sits tight under its term'],
+  ];
+  for (const [selector, why] of tight) {
+    assert.equal(spacingValue(selector, 'margin'), '0', `${why} (${selector} { margin })`);
+  }
+
+  const separated: Array<[string, string]> = [
+    ['.empty-state', 'the empty state is separated from the heading'],
+    ['.empty-state__extra', 'the credentials are separated from the description'],
+    ['.credentials__value + .credentials__term', 'the two credential pairs are separated'],
+    ['.sign-in__form', 'the form is separated from the empty state'],
+    ['.field + .field', 'the two fields are separated'],
+    ['.button--primary', 'the form action is separated from the last field'],
+  ];
+  for (const [selector, why] of separated) {
+    assert.match(
+      spacingValue(selector, 'margin'),
+      /^var\(--space-[a-z0-9-]+\)(\s+0){1,3}$/,
+      `${why}: ${selector} { margin: var(--space-4) ... }`,
+    );
+  }
+
+  // Both levels have to be present: a flat sheet of one value fails here.
+  const spacingValues = cssRules(readSource('src/styles/app.css')).flatMap((rule) =>
+    declarations(rule.body)
+      .filter((declaration) => SPACING_PROPERTIES.has(declaration.property))
+      .map((declaration) => declaration.value),
+  );
+  const tightCount = spacingValues.filter((value) => value === '0').length;
+  const separatedCount = spacingValues.filter((value) => value.startsWith('var(--space-')).length;
+  assert.ok(tightCount >= 5, `groups sit tight together (${tightCount} zero-spacing declarations)`);
+  assert.ok(
+    separatedCount >= 5,
+    `groups are separated with the design-system step (${separatedCount} token-spacing declarations)`,
+  );
+}
+
+/**
+ * Review fix: `.page` used `min-height: 100vh`, which overflows under mobile
+ * browser chrome. The visible viewport unit (100dvh) wins; 100vh may only
+ * survive as a fallback that a dvh declaration overrides.
+ */
+function TestSignInPageTracksTheMobileViewport() {
+  const rules = cssRules(readSource('src/styles/app.css'));
+
+  const pageHeights = ruleDeclarations('.page')
+    .filter((declaration) => declaration.property === 'min-height' || declaration.property === 'height')
+    .map((declaration) => declaration.value);
+  assert.ok(pageHeights.length > 0, '.page sets a height');
+  assert.equal(
+    pageHeights.at(-1),
+    '100dvh',
+    '.page tracks the visible viewport with 100dvh',
+  );
+
+  for (const rule of rules) {
+    const heights = declarations(rule.body).filter(
+      (declaration) => declaration.property === 'min-height' || declaration.property === 'height',
+    );
+    for (const [index, declaration] of heights.entries()) {
+      if (!/\d(?:d|s|l)?vh$/.test(declaration.value)) {
+        continue;
+      }
+      const overridden = heights
+        .slice(index + 1)
+        .some((later) => later.value === '100dvh');
+      assert.ok(
+        declaration.value === '100dvh' || overridden,
+        `${rule.selectors.join(', ')} { ${declaration.property}: ${declaration.value} } needs a 100dvh override: 100vh overflows under mobile browser chrome`,
       );
     }
   }
@@ -362,5 +485,10 @@ test(
   TestSignInFormControlsAreLabelledAndFocusable,
 );
 test('TestSignInSpacingUsesDesignTokens', TestSignInSpacingUsesDesignTokens);
+test(
+  'TestSignInGroupsRelatedContentWithAVerticalRhythm',
+  TestSignInGroupsRelatedContentWithAVerticalRhythm,
+);
+test('TestSignInPageTracksTheMobileViewport', TestSignInPageTracksTheMobileViewport);
 test('TestSignInLayoutStaysMobileFirst', TestSignInLayoutStaysMobileFirst);
 test('TestSignInEmptyStateEscapesItsContent', TestSignInEmptyStateEscapesItsContent);

@@ -27,13 +27,19 @@ export function isUntouched(state: SignInState = {}): boolean {
   return (values.email ?? '').trim() === '' && (values.password ?? '').trim() === '';
 }
 
+/**
+ * Every element stays on a single source line, with escaped values
+ * interpolated in place: keeping an element's attributes (notably the email and
+ * password `value` attributes) on one line is what makes the escaping and any
+ * attribute breakout auditable at a glance.
+ */
 function renderDemoCredentials(): string {
   return [
     '<dl class="credentials">',
     '  <dt class="credentials__term">Email</dt>',
-    '  <dd class="credentials__value">' + escapeHtml(DEMO_CREDENTIALS.email) + '</dd>',
+    `  <dd class="credentials__value">${escapeHtml(DEMO_CREDENTIALS.email)}</dd>`,
     '  <dt class="credentials__term">Password</dt>',
-    '  <dd class="credentials__value">' + escapeHtml(DEMO_CREDENTIALS.password) + '</dd>',
+    `  <dd class="credentials__value">${escapeHtml(DEMO_CREDENTIALS.password)}</dd>`,
     '</dl>',
   ].join('\n');
 }
@@ -66,22 +72,18 @@ export function SignIn(state: SignInState = {}): string {
   }
 
   if (state.error) {
-    lines.push('    <p class="sign-in__error" role="alert">' + escapeHtml(state.error) + '</p>');
+    lines.push(`    <p class="sign-in__error" role="alert">${escapeHtml(state.error)}</p>`);
   }
 
   lines.push(
     '    <form class="sign-in__form" id="sign-in-form" method="post" action="/sign-in" novalidate>',
     '      <div class="field">',
     '        <label class="field__label" for="sign-in-email">Email</label>',
-    '        <input class="field__input" id="sign-in-email" name="email" type="email" autocomplete="username" required value="' +
-      escapeHtml(values.email ?? '') +
-      '">',
+    `        <input class="field__input" id="sign-in-email" name="email" type="email" autocomplete="username" required value="${escapeHtml(values.email ?? '')}">`,
     '      </div>',
     '      <div class="field">',
     '        <label class="field__label" for="sign-in-password">Password</label>',
-    '        <input class="field__input" id="sign-in-password" name="password" type="password" autocomplete="current-password" required value="' +
-      escapeHtml(values.password ?? '') +
-      '">',
+    `        <input class="field__input" id="sign-in-password" name="password" type="password" autocomplete="current-password" required value="${escapeHtml(values.password ?? '')}">`,
     '      </div>',
     '      <button class="button button--primary" type="submit">Sign in</button>',
     '    </form>',

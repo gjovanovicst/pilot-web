@@ -471,6 +471,54 @@ function TestSignInEmptyStateEscapesItsContent() {
   assert.ok(!withError.includes('<img'), 'error messages are escaped');
 }
 
+/**
+ * Review fix: markup keeps one element per source line, with the escaped value
+ * interpolated in place. Splintering a single element — notably the email and
+ * password input `value` attributes — across concatenated source lines makes
+ * escaping and attribute breakout much harder to audit than a one-line
+ * template literal, and buys nothing (the escaped value is still interpolated,
+ * just via `+`).
+ */
+function TestSignInKeepsEachElementOnOneSourceLine() {
+  const source = readSource('src/pages/SignIn.ts');
+
+  assert.ok(
+    !/['"`]\s*\+\s*escapeHtml\(|escapeHtml\([^)]*\)\s*\+\s*['"`]/.test(source),
+    'escaped values are interpolated into the element string instead of concatenated onto it',
+  );
+
+  // An element split over several lines leaves the line that opens it without
+  // its closing `>`, so every markup line has to carry balanced angle brackets.
+  // Lines without markup are skipped (an arrow function's `=>` is not a tag).
+  const lines = source.split('\n');
+  const markupLines = lines
+    .map((line, index) => ({ line, number: index + 1 }))
+    .filter(({ line }) => /<[a-zA-Z/]/.test(line));
+  assert.ok(markupLines.length >= 8, 'the page builds its markup from one-line element strings');
+
+  for (const { line, number } of markupLines) {
+    const opens = (line.match(/</g) ?? []).length;
+    const closes = (line.match(/>/g) ?? []).length;
+    assert.equal(
+      opens,
+      closes,
+      `line ${number} splinters one element across source lines: ${line.trim()}`,
+    );
+  }
+
+  // The two value attributes under test are each written on their own line,
+  // escaped in place, so an attribute breakout is readable at a glance.
+  const inputLines = lines.filter((line) => line.includes('<input'));
+  assert.equal(inputLines.length, 2, 'the email and password inputs are one-line elements');
+  for (const line of inputLines) {
+    assert.match(
+      line,
+      /value="\$\{escapeHtml\([^)]*\)\}"/,
+      'the input value attribute stays on the element line, escaped in place',
+    );
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * registration
  * ------------------------------------------------------------------ */
@@ -492,3 +540,4 @@ test(
 test('TestSignInPageTracksTheMobileViewport', TestSignInPageTracksTheMobileViewport);
 test('TestSignInLayoutStaysMobileFirst', TestSignInLayoutStaysMobileFirst);
 test('TestSignInEmptyStateEscapesItsContent', TestSignInEmptyStateEscapesItsContent);
+test('TestSignInKeepsEachElementOnOneSourceLine', TestSignInKeepsEachElementOnOneSourceLine);

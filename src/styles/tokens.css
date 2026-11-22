@@ -1,0 +1,25 @@
+/* Pilot Web — design-system v1 tokens.
+ *
+ * This is the only file in the repository allowed to hold raw values.
+ * Everything else must reference these custom properties.
+ * Values are pinned to Pilot Web design system v1
+ * (sha256 ec2a40a0a185ef454f9da603b438ab0e30623806c213a66f4747f48589ff363a).
+ */
+:root {
+  /* colours */
+  --color-brand: #4f5eea;
+  --color-bg-canvas: #fbfbfd;
+  --color-bg-surface: #ffffff;
+  --color-text-primary: #101223;
+  --color-text-secondary: #5b5f7b;
+  --color-danger: #d92d20;
+
+  /* radius */
+  --radius-md: 6px;
+
+  /* spacing */
+  --space-4: 16px;
+
+  /* typography */
+  --font-sans: Inter, system-ui, sans-serif;
+}

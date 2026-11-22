@@ -1,0 +1,119 @@
+/* Pilot Web — sign-in surface styles.
+ *
+ * Every colour, radius, spacing and font value comes from the design-system v1
+ * tokens declared in tokens.css: no raw colour values, no off-scale spacing.
+ * The layout is single column and fluid, so it stays usable from 375px up.
+ */
+
+.page {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: var(--space-4);
+  background-color: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+.sign-in {
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+.sign-in__heading {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.sign-in__error {
+  margin: var(--space-4) 0 0;
+  color: var(--color-danger);
+}
+
+.empty-state {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+}
+
+.empty-state__title {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.empty-state__description {
+  margin: var(--space-4) 0 0;
+  color: var(--color-text-secondary);
+}
+
+.empty-state__extra {
+  margin: var(--space-4) 0 0;
+}
+
+.credentials {
+  margin: var(--space-4) 0 0;
+  padding: 0;
+}
+
+.credentials__term {
+  color: var(--color-text-secondary);
+}
+
+.credentials__value {
+  margin: var(--space-4) 0 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+}
+
+.sign-in__form {
+  margin: var(--space-4) 0 0;
+}
+
+.field {
+  margin: var(--space-4) 0 0;
+}
+
+.field__label {
+  display: block;
+  color: var(--color-text-primary);
+}
+
+.field__input {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  margin: var(--space-4) 0 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+.button {
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+
+.button--primary {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--color-brand);
+  color: var(--color-bg-surface);
+  font-family: var(--font-sans);
+}
+
+/* Accessibility: every interactive element shows a visible focus ring. */
+.sign-in a:focus-visible,
+.sign-in button:focus-visible,
+.sign-in input:focus-visible {
+  outline: 2px solid var(--color-brand);
+}

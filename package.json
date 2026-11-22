@@ -1,0 +1,13 @@
+{
+  "name": "pilot-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pilot Web surfaces: design-system v1 tokens plus the sign-in page and its empty state.",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test src/pages/SignIn.test.ts"
+  }
+}

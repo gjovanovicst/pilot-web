@@ -6,7 +6,12 @@ export const SIGN_IN_EMPTY_STATE_TITLE = 'Sign in with the demo account';
 export const SIGN_IN_EMPTY_STATE_DESCRIPTION =
   'The form starts empty. Use the demo credentials below to explore the pilot.';
 
-/** Id base of the empty state's title and description. */
+/**
+ * Id of the sign-in empty state. It is rendered on the empty state's section
+ * (and its title and description are named `<id>-title` / `<id>-description`),
+ * so a test or another surface can anchor on *this* empty state instead of on
+ * whichever region happens to come first in document order.
+ */
 export const SIGN_IN_EMPTY_STATE_ID = 'sign-in-empty-state';
 
 /**
@@ -145,7 +150,8 @@ function renderForm(values: Partial<SignInValues>, describedBy?: string): string
  * The credential list is compact: every element is short enough to sit on one
  * source line, with the escaped value interpolated in place. The `dt`/`dd`
  * pairs are what names each credential: a value on its own would not tell the
- * user which credential it is.
+ * user which credential it is. One `dl` holds both pairs, so each term is
+ * paired with the value that belongs to it.
  */
 function renderDemoCredentials(): string {
   return [

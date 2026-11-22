@@ -4,21 +4,22 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, relative } from 'node:path';
 
-import { SignIn } from './SignIn.ts';
+import { SignIn, SIGN_IN_EMPTY_STATE_ID, SIGN_IN_EMPTY_STATE_TITLE } from './SignIn.ts';
 import { DEMO_CREDENTIALS } from '../constants/demoCredentials.ts';
 import {
   accessibleDescription,
   accessibleName,
-  attribute,
-  descriptionEntries,
-  findAll,
-  getAllByLabelText,
-  parseHtml,
-  queryByRole,
-  textContent,
-  walk,
-  type DomElement,
-} from '../lib/dom.ts';
+  attr,
+  byId,
+  controlsLabelled,
+  definitionPairs,
+  elementsOf,
+  headings,
+  landmarks,
+  pageText,
+  parsePage,
+  type PageElement,
+} from '../../test/support/page.ts';
 
 /* ------------------------------------------------------------------ *
  * helpers
@@ -161,21 +162,39 @@ function nonTokenSources(dir = join(repoRoot, 'src')): Array<{ path: string; con
  * named landmark the empty state exposes, the control a label names, and the
  * value a definition list pairs with its term. None of those depend on class
  * names, ids or element order.
+ *
+ * Review fix: the empty state used to be found as "the first region on the
+ * page", so a second named `<section>` anywhere on the surface would have made
+ * the assertions below read the wrong element while still passing. It is now
+ * anchored on the id the page gives its own empty state, and that anchor is
+ * checked to be the landmark its title names.
  */
-
-/** The rendered empty state: the page's named section, or null when there is none. */
-function emptyStateOf(markup: string): DomElement | null {
-  return queryByRole(parseHtml(markup), 'region');
+function emptyStateOf(markup: string): PageElement | null {
+  const page = parsePage(markup);
+  const anchor = byId(page, SIGN_IN_EMPTY_STATE_ID);
+  if (!anchor) {
+    return null;
+  }
+  assert.ok(
+    landmarks(page).includes(anchor),
+    'the empty state is the named landmark its title gives it',
+  );
+  assert.equal(
+    accessibleName(page, anchor),
+    SIGN_IN_EMPTY_STATE_TITLE,
+    'the anchored element is the sign-in empty state, not another section',
+  );
+  return anchor;
 }
 
 /** An attribute as the page rendered it; a bare attribute reads as `''`. */
-function attributeValue(element: DomElement, name: string): string | undefined {
-  return attribute(element, name);
+function attributeValue(element: PageElement, name: string): string | undefined {
+  return attr(element, name);
 }
 
 /** The control the page labels with `label`, e.g. the field named "Email". */
-function renderedInput(markup: string, label: string): DomElement {
-  const matches = getAllByLabelText(parseHtml(markup), label);
+function renderedInput(markup: string, label: string): PageElement {
+  const matches = controlsLabelled(parsePage(markup), label);
   assert.equal(matches.length, 1, `the page renders exactly one "${label}" field`);
   return matches[0];
 }
@@ -199,25 +218,25 @@ const DESIGN_SYSTEM_V1: Record<string, string> = {
 /** AC1: on load the empty state names the demo credentials. */
 function TestSignInShowsTheEmptyState() {
   const markup = SignIn(); // the page as it renders on load, before any interaction
-  const tree = parseHtml(markup);
-  const emptyState = queryByRole(tree, 'region');
+  const tree = parsePage(markup);
+  const emptyState = emptyStateOf(markup);
 
   assert.ok(emptyState, 'the sign-in page renders an empty state on load');
 
-  assert.ok(queryByRole(emptyState, 'heading'), 'the empty state has a title');
+  assert.ok(headings(emptyState).length > 0, 'the empty state has a title');
   assert.ok(
     accessibleDescription(tree, emptyState).length > 0,
     'the empty state explains why it is empty',
   );
 
-  const text = textContent(emptyState);
+  const text = pageText(emptyState);
   assert.ok(
     text.includes(DEMO_CREDENTIALS.email),
     `the empty state names the demo email (${DEMO_CREDENTIALS.email})`,
   );
   assert.ok(text.includes(DEMO_CREDENTIALS.password), 'the empty state names the demo password');
 
-  const terms = descriptionEntries(emptyState).map((entry) => entry.term);
+  const terms = definitionPairs(emptyState).map((entry) => entry.term);
   assert.ok(terms.includes('Email'), 'email is named');
   assert.ok(terms.includes('Password'), 'password is named');
 
@@ -270,18 +289,17 @@ function TestSignInEmptyStateUsesDesignTokens() {
   }
 
   // The empty state carries no inline colours either.
-  const tree = parseHtml(SignIn());
-  const emptyState = queryByRole(tree, 'region');
+  const emptyState = emptyStateOf(SignIn());
   assert.ok(emptyState);
-  for (const element of walk(emptyState)) {
+  for (const element of elementsOf(emptyState)) {
     assert.ok(
       !attributeValue(element, 'style'),
       'the empty state does not use inline styles',
     );
   }
   const rendered = [
-    textContent(emptyState),
-    ...walk(emptyState).flatMap((element) => Object.values(element.attrs)),
+    pageText(emptyState),
+    ...elementsOf(emptyState).flatMap((element) => Object.values(element.attrs)),
   ].join(' ');
   assert.ok(
     !RAW_COLOR.test(rendered.replace(/var\([^)]*\)/g, '')),
@@ -333,11 +351,11 @@ function TestSignInHidesTheEmptyStateOnceTheFormIsInUse() {
 
 function TestSignInFormControlsAreLabelledAndFocusable() {
   const markup = SignIn({ touched: true });
-  const tree = parseHtml(markup);
+  const tree = parsePage(markup);
 
-  const inputs = findAll(tree, (element) => element.tag === 'input');
-  assert.ok(inputs.length >= 2, 'the form has email and password inputs');
-  for (const input of inputs) {
+  const inputElements = elementsOf(tree, 'input');
+  assert.ok(inputElements.length >= 2, 'the form has email and password inputs');
+  for (const input of inputElements) {
     assert.ok(accessibleName(tree, input).length > 0, 'every input has an associated label');
   }
 
@@ -348,7 +366,7 @@ function TestSignInFormControlsAreLabelledAndFocusable() {
   assert.equal(attributeValue(email, 'autocomplete'), 'username');
   assert.equal(attributeValue(password, 'autocomplete'), 'current-password');
 
-  const buttons = findAll(tree, (element) => element.tag === 'button');
+  const buttons = elementsOf(tree, 'button');
   assert.ok(buttons.length > 0, 'the form has a button');
   for (const button of buttons) {
     assert.ok(
@@ -373,7 +391,7 @@ function TestSignInFormControlsAreLabelledAndFocusable() {
   // renders: every rendered control gets a ring, and no rule targets an element
   // that never renders (the sign-in page has no links, so an `a:focus-visible`
   // rule would be dead CSS).
-  const renderedTags = new Set(walk(tree).map((element) => element.tag));
+  const renderedTags = new Set(elementsOf(tree).map((element) => element.tag));
   const focusSelectors = focusRules.flatMap((rule) => rule.selectors).join(', ');
   for (const control of ['a', 'button', 'input', 'select', 'textarea']) {
     const renders = renderedTags.has(control);
@@ -515,7 +533,7 @@ function TestSignInEmptyStateEscapesItsContent() {
   assert.ok(!markup.includes('<script>'), 'user input never reaches the page as markup');
   assert.ok(markup.includes('&quot;&gt;&lt;script&gt;'), 'the input value is escaped');
   assert.deepEqual(
-    findAll(parseHtml(markup), (element) => element.tag === 'script'),
+    elementsOf(parsePage(markup), 'script'),
     [],
     'the hostile value adds no element to the parsed page',
   );
@@ -528,7 +546,7 @@ function TestSignInEmptyStateEscapesItsContent() {
   const withError = SignIn({ error: '<img src=x onerror=alert(1)>' });
   assert.ok(!withError.includes('<img'), 'error messages are escaped');
   assert.deepEqual(
-    findAll(parseHtml(withError), (element) => element.tag === 'img'),
+    elementsOf(parsePage(withError), 'img'),
     [],
     'the error message adds no element to the parsed page',
   );
@@ -572,8 +590,7 @@ function TestSignInRendersInputsWithEscapedValues() {
 
   // A hostile value is escaped in place: it cannot break out of the attribute
   // or add markup of its own.
-  const inputsOnLoad = (rendered: string) =>
-    findAll(parseHtml(rendered), (element) => element.tag === 'input').length;
+  const inputsOnLoad = (rendered: string) => elementsOf(parsePage(rendered), 'input').length;
   const hostile = '"><script>alert(1)</script>';
   const escaped = SignIn({ values: { email: hostile, password: 'p"w<d>' } });
 

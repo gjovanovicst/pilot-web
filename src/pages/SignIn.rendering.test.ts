@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { SignIn } from './SignIn.ts';
-import { attribute, findById, parseHtml, walk, type DomElement } from '../lib/dom.ts';
+import { attr, byId, elementsOf, parsePage, type PageElement } from '../../test/support/page.ts';
 
 /* ------------------------------------------------------------------ *
  * Rendering integrity of the sign-in surface.
@@ -15,17 +15,17 @@ import { attribute, findById, parseHtml, walk, type DomElement } from '../lib/do
  * at the hint it used to render).
  * ------------------------------------------------------------------ */
 
-function idsOnPage(tree: DomElement): string[] {
-  return walk(tree)
-    .map((element) => attribute(element, 'id'))
+function idsOnPage(tree: PageElement): string[] {
+  return elementsOf(tree)
+    .map((element) => attr(element, 'id'))
     .filter((id): id is string => id !== undefined);
 }
 
-function ariaReferences(tree: DomElement): Array<{ id: string; source: string }> {
+function ariaReferences(tree: PageElement): Array<{ id: string; source: string }> {
   const references: Array<{ id: string; source: string }> = [];
-  for (const element of walk(tree)) {
+  for (const element of elementsOf(tree)) {
     for (const name of ['aria-labelledby', 'aria-describedby']) {
-      const value = attribute(element, name);
+      const value = attr(element, name);
       if (!value) {
         continue;
       }
@@ -49,7 +49,7 @@ function TestSignInMarkupHasUniqueIdsAndResolvableReferences() {
   ];
 
   for (const [state, input] of states) {
-    const tree = parseHtml(SignIn(input));
+    const tree = parsePage(SignIn(input));
 
     const ids = idsOnPage(tree);
     assert.equal(
@@ -60,7 +60,7 @@ function TestSignInMarkupHasUniqueIdsAndResolvableReferences() {
 
     for (const reference of ariaReferences(tree)) {
       assert.ok(
-        findById(tree, reference.id) !== undefined,
+        byId(tree, reference.id) !== undefined,
         `${reference.source} resolves to an element on the page ${state}`,
       );
     }
@@ -68,7 +68,7 @@ function TestSignInMarkupHasUniqueIdsAndResolvableReferences() {
 
   // The hint the fields are described by is gone once the form is in use, so the
   // fields must not keep pointing at it.
-  const suppressed = parseHtml(SignIn({ touched: true }));
+  const suppressed = parsePage(SignIn({ touched: true }));
   assert.deepEqual(ariaReferences(suppressed), [], 'no description survives the hint');
 }
 

@@ -6,8 +6,10 @@ import { escapeHtml } from '../lib/html.ts';
  *
  * The title and the description are wired to the section through
  * `aria-labelledby` / `aria-describedby`, so the component exposes a named
- * region to assistive technology and the surface can be queried by that
- * semantics instead of by its class names.
+ * region landmark to assistive technology, and the section also carries the id
+ * itself: a page that renders more than one named section can then anchor on
+ * *its* empty state by id instead of on whichever region comes first in
+ * document order.
  *
  * Markup only: all styling lives in src/styles/app.css and comes from the
  * design-system v1 tokens, so this component never carries raw values.
@@ -18,8 +20,9 @@ export type EmptyStateProps = {
   /** Pre-rendered, already-escaped HTML shown below the description. */
   children?: string;
   /**
-   * Base id for the title/description ids. Give every empty state on the same
-   * page its own value so the references stay unambiguous.
+   * Id of the empty state. It is rendered on the section, and the title and
+   * description are named `<id>-title` / `<id>-description`. Give every empty
+   * state on the same page its own value so ids and references stay unique.
    */
   id?: string;
 };
@@ -33,11 +36,13 @@ export function EmptyState({
   children,
   id = DEFAULT_EMPTY_STATE_ID,
 }: EmptyStateProps): string {
+  const emptyStateId = escapeHtml(id);
   const titleId = escapeHtml(`${id}-title`);
   const descriptionId = escapeHtml(`${id}-description`);
 
   const lines: string[] = [
     '<section',
+    `  id="${emptyStateId}"`,
     '  class="empty-state"',
     `  aria-labelledby="${titleId}"`,
     `  aria-describedby="${descriptionId}"`,

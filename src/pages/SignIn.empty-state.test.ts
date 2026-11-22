@@ -4,21 +4,23 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
-import { SignIn } from './SignIn.ts';
-import { EmptyState } from '../components/EmptyState.ts';
+import { SignIn, SIGN_IN_EMPTY_STATE_ID, SIGN_IN_EMPTY_STATE_TITLE } from './SignIn.ts';
+import { DEFAULT_EMPTY_STATE_ID, EmptyState } from '../components/EmptyState.ts';
 import { DEMO_CREDENTIALS } from '../constants/demoCredentials.ts';
 import {
   accessibleDescription,
   accessibleName,
-  attribute,
-  descriptionEntries,
-  findAll,
-  getAllByLabelText,
-  parseHtml,
-  queryByRole,
-  textContent,
-  type DomElement,
-} from '../lib/dom.ts';
+  attr,
+  byId,
+  controlsLabelled,
+  definitionPairs,
+  elementsOf,
+  isElement,
+  landmarks,
+  pageText,
+  parsePage,
+  type PageElement,
+} from '../../test/support/page.ts';
 
 /* ------------------------------------------------------------------ *
  * T-1 — sign in with an empty state: the behaviour under review
@@ -38,6 +40,11 @@ import {
  * names, and the value a definition list pairs with its term. None of those
  * depend on class names, ids or element order, so the assertions below fail
  * only when the behaviour changes.
+ *
+ * Review fix: the empty state used to be located as "the first region on the
+ * page". A second named `<section>` would then have been read instead of the
+ * empty state while every assertion still passed, so the lookup is anchored on
+ * the id the page gives its own empty state and checked against the title.
  * ------------------------------------------------------------------ */
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -47,13 +54,30 @@ function readSource(path: string): string {
 }
 
 /** Normalised text of a subtree, so indentation never affects a comparison. */
-function textOf(node: DomElement): string {
-  return textContent(node).replace(/\s+/g, ' ').trim();
+function textOf(node: PageElement): string {
+  return pageText(node).replace(/\s+/g, ' ').trim();
 }
 
-/** The rendered empty state: the page's named section, or null when there is none. */
-function emptyStateOf(markup: string): DomElement | null {
-  return queryByRole(parseHtml(markup), 'region');
+/**
+ * The sign-in empty state, located by the id the page gives it — never by
+ * document order — and checked to be the landmark its title names.
+ */
+function emptyStateOf(markup: string): PageElement | null {
+  const page = parsePage(markup);
+  const anchor = byId(page, SIGN_IN_EMPTY_STATE_ID);
+  if (!anchor) {
+    return null;
+  }
+  assert.ok(
+    landmarks(page).includes(anchor),
+    'the empty state is the named landmark its title gives it',
+  );
+  assert.equal(
+    accessibleName(page, anchor),
+    SIGN_IN_EMPTY_STATE_TITLE,
+    'the anchored element is the sign-in empty state, not another section',
+  );
+  return anchor;
 }
 
 /**
@@ -61,22 +85,22 @@ function emptyStateOf(markup: string): DomElement | null {
  * "Email". Returns undefined when the pair is missing, so a credential that
  * floats somewhere else in the page does not count as "named".
  */
-function credentialValue(emptyState: DomElement, term: string): string | undefined {
-  return descriptionEntries(emptyState).find(
+function credentialValue(emptyState: PageElement, term: string): string | undefined {
+  return definitionPairs(emptyState).find(
     (entry) => entry.term.toLowerCase() === term.toLowerCase(),
   )?.value;
 }
 
 /** The control the page labels with `label`, e.g. the field named "Email". */
-function inputLabelled(markup: string, label: string): DomElement {
-  const matches = getAllByLabelText(parseHtml(markup), label);
+function inputLabelled(markup: string, label: string): PageElement {
+  const matches = controlsLabelled(parsePage(markup), label);
   assert.equal(matches.length, 1, `the page renders exactly one "${label}" field`);
   return matches[0];
 }
 
 /** The value a rendered control carries; undefined when it carries none. */
 function inputValue(markup: string, label: string): string | undefined {
-  return attribute(inputLabelled(markup, label), 'value');
+  return attr(inputLabelled(markup, label), 'value');
 }
 
 /**
@@ -86,15 +110,11 @@ function inputValue(markup: string, label: string): string | undefined {
  */
 function TestSignInEmptyStateNamesTheDemoCredentials() {
   const markup = SignIn(); // the page exactly as it renders on load
-  const tree = parseHtml(markup);
-  const emptyState = queryByRole(tree, 'region');
+  const tree = parsePage(markup);
+  const emptyState = emptyStateOf(markup);
 
   assert.ok(emptyState, 'an untouched form renders the empty state instead of a blank surface');
-  assert.ok(queryByRole(emptyState, 'heading'), 'the empty state has a title');
-  assert.ok(
-    accessibleDescription(tree, emptyState).length > 0,
-    'the empty state explains why it is empty',
-  );
+  assert.ok(accessibleDescription(tree, emptyState).length > 0, 'the empty state explains why it is empty');
 
   // The credentials come from the single source of truth, and they are real
   // values a user can type — not a placeholder.
@@ -164,7 +184,7 @@ function TestSignInEmptyStateIsSuppressedOnceCredentialsAreSupplied() {
   assert.ok(!filled.includes(DEMO_CREDENTIALS.password), 'typed values replace the demo hint');
 
   // Once the hint is gone, nothing still describes the fields with it.
-  const filledTree = parseHtml(filled);
+  const filledTree = parsePage(filled);
   assert.equal(
     accessibleDescription(filledTree, inputLabelled(filled, 'Email')),
     '',
@@ -193,12 +213,13 @@ function TestEmptyStateRendersAndEscapesItsContent() {
     title: 'Nothing here yet',
     description: 'Add the first item.',
   });
-  const tree = parseHtml(markup);
-  const emptyState = queryByRole(tree, 'region');
+  const tree = parsePage(markup);
+  const emptyState = byId(tree, DEFAULT_EMPTY_STATE_ID);
 
   assert.ok(emptyState, 'the component renders an empty state on its own');
+  assert.ok(landmarks(tree).includes(emptyState), 'the empty state is a named landmark');
   assert.equal(
-    tree.children.filter((child) => child.kind === 'element').length,
+    tree.children.filter((child) => isElement(child)).length,
     1,
     'the empty state is the whole render, not a fragment of one',
   );
@@ -226,11 +247,11 @@ function TestEmptyStateRendersAndEscapesItsContent() {
   assert.match(escaped, /&lt;script&gt;/);
   assert.match(escaped, /a &amp; b/, 'the description is escaped');
 
-  const escapedTree = parseHtml(escaped);
-  const escapedState = queryByRole(escapedTree, 'region');
+  const escapedTree = parsePage(escaped);
+  const escapedState = byId(escapedTree, DEFAULT_EMPTY_STATE_ID);
   assert.ok(escapedState);
   assert.deepEqual(
-    findAll(escapedTree, (element) => element.tag === 'script'),
+    elementsOf(escapedTree, 'script'),
     [],
     'the hostile title adds no element to the parsed page',
   );

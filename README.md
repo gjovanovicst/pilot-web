@@ -13,13 +13,13 @@ comes from the design-system v1 tokens.
 | `src/styles/tokens.css` | The only file with raw values: design-system v1 tokens. |
 | `src/styles/app.css` | Sign-in and empty-state styles, tokens only. |
 | `src/constants/demoCredentials.ts` | Single source of truth for the demo account. |
-| `src/components/EmptyState.ts` | The approved empty-state pattern (title, description, optional content), exposed as a named region. |
+| `src/components/EmptyState.ts` | The approved empty-state pattern (title, description, optional content), exposed as a named region whose section carries the caller's id. |
 | `src/pages/SignIn.ts` | The sign-in page: empty state while the form is untouched. |
-| `src/lib/dom.ts` | Dependency-free HTML parser plus the accessibility queries the tests read the page with. |
-| `src/lib/dom.test.ts` | Proves the queries survive decorated, wrapped and reflowed markup. |
 | `src/pages/SignIn.test.ts` | Tokens, layout, accessibility and escaping tests for the surface. |
 | `src/pages/SignIn.empty-state.test.ts` | The behaviour under review: the empty state names both demo credentials on load, and is suppressed as soon as a credential is supplied. |
 | `src/pages/SignIn.rendering.test.ts` | Rendering integrity: unique ids and resolvable `aria-labelledby` / `aria-describedby` references in every state. |
+| `test/support/page.ts` | Test-only reader for rendered markup (see below), not part of the app. |
+| `test/support/page.test.ts` | Pins the reader's own behaviour: parsing edge cases and the queries the page tests rely on. |
 | `.prettierrc.json` | Markup formatting: 100-column lines, one attribute per line. |
 
 ## Running the tests
@@ -29,32 +29,48 @@ pnpm test      # or: npm test
 ```
 
 The suite runs on Node's built-in test runner (`node --test`), so it needs no
-third-party packages. `npm test` globs `src/**/*.test.ts`, so a new test file
-next to the page is picked up without touching `package.json`.
+third-party packages. `npm test` globs `src/**/*.test.ts` and
+`test/**/*.test.ts`, so a new page test next to the page — or a new test for the
+support module — is picked up without touching `package.json`.
 
 ## Reading the page in a test
 
 The page and the empty state are plain markup functions, so a test has to read
-the rendered markup back. `src/lib/dom.ts` parses it into a tree once and answers
-the questions the tests actually ask:
+the rendered markup back. The supported way to do that is jsdom plus
+`@testing-library/dom` (`getByRole`, `getByLabelText`, …). Neither can be
+installed here: this sandbox has no package registry access, and `npm install`
+fails with `EAI_AGAIN`.
 
-- `queryByRole(tree, 'region')` — the empty state. It is a `<section>` named by
-  its title (`aria-labelledby`), which is a region landmark to assistive
-  technology; no class name or position in the page is involved.
-- `getAllByLabelText(tree, 'Email')` — the control the page labels "Email",
-  resolved through `label[for]` (or a wrapping label), never through an internal
-  input id.
-- `descriptionEntries(emptyState)` — the `dt`/`dd` pairs, so a credential counts
-  as named only when its value is paired with its term. Pairing follows the
-  definition-list semantics, not sibling position, so wrapping each pair in a
-  group element changes nothing.
+`test/support/page.ts` is the deliberately small stopgap that stands in for those
+two packages. It lives under `test/`, no source file under `src/` may import it,
+and it is not part of the shipped app. It parses the markup into a tree
+(`parsePage`) and answers only the questions the page tests ask:
+
+- `landmarks(page)` — the landmarks the page exposes. `section` and `form` only
+  count once they carry a name (`aria-labelledby` / `aria-label`), which is the
+  rule the empty state relies on; an unnamed section is not a landmark.
 - `accessibleName` / `accessibleDescription` — what a screen reader announces,
   including the `aria-describedby` link from each field to the demo credentials.
+- `controlsLabelled(page, 'Email')` — the control a label names, resolved
+  through `label[for]` (or a wrapping label), never through an internal input id.
+- `definitionPairs(page)` — the `dt`/`dd` pairs, so a credential counts as named
+  only when its value is paired with its term. Pairing is scoped to the `dl`
+  that owns the `dt`: two adjacent or nested lists never pair across each other,
+  while wrapping a pair in a group element changes nothing.
 
 A test that reads the page this way keeps passing when a class is renamed, an
-attribute is added, the attributes are reflowed or a wrapper is introduced, and
-still fails when the behaviour itself goes away. `src/lib/dom.test.ts` pins that
-property.
+attribute is added, the attributes reflowed or a wrapper introduced, and still
+fails when the behaviour itself goes away.
+
+Because a hand-maintained parser and a partial role map drift from the
+specifications, this module must not grow into a general DOM/ARIA
+implementation: when dependencies can be installed, delete `test/support/page.ts`
+and its test, and rewrite the page tests against `@testing-library/dom`. The
+coverage it has today is pinned in `test/support/page.test.ts` — decorated and
+wrapped markup, void elements, comments and doctypes, bare and unquoted
+attributes, wrapping labels, the landmark and heading queries, definition lists
+scoped per `dl`, and out-of-range character references (`&#x110000;`, surrogate
+halves) that must never throw.
 
 ## Formatting
 
@@ -69,7 +85,8 @@ behavioural test.
 
 - The demo credentials live in `src/constants/demoCredentials.ts`. They are the
   seeded demo account for the pilot; if the real values differ, change them in
-  that one file and every surface follows.
+  that one file and every surface follows. Test fixtures build their credentials
+  from that constant instead of repeating the literals.
 - The repository had no app scaffold and no package registry access, so the
   components are dependency-free markup functions rather than React/JSX ones,
   and the tests are plain Node tests. When the real pilot-web app (with its
@@ -94,6 +111,11 @@ behavioural test.
   credential that is merely present somewhere on the page does not count as
   named. The suppression cases cover email-only, password-only, both, and the
   touched flag.
+- The empty state is located by the id the page gives it
+  (`SIGN_IN_EMPTY_STATE_ID`, rendered on the `<section>`), never by document
+  order, so a second named section on the surface cannot make a test assert
+  against the wrong element. The lookup also checks that the anchored section is
+  the landmark its title names.
 - While the empty state renders, both fields carry
   `aria-describedby="sign-in-demo-credentials"`, so a screen-reader user hears
   the demo credentials on focus instead of only sighted users seeing them. The

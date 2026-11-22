@@ -472,51 +472,83 @@ function TestSignInEmptyStateEscapesItsContent() {
 }
 
 /**
- * Review fix: markup keeps one element per source line, with the escaped value
- * interpolated in place. Splintering a single element — notably the email and
- * password input `value` attributes — across concatenated source lines makes
- * escaping and attribute breakout much harder to audit than a one-line
- * template literal, and buys nothing (the escaped value is still interpolated,
- * just via `+`).
+ * Review fix: putting every element on one source line turned the two `<input>`
+ * elements into ~230-character ribbons — the "auditable at a glance" goal was
+ * defeated by horizontal scrolling in every diff viewer. Wide elements now wrap
+ * with one complete attribute per line, while an interpolated value stays inline
+ * with the attribute it belongs to (`value="${escapeHtml(...)}"`) instead of
+ * being reassembled from `+` pieces: neither extreme.
  */
-function TestSignInKeepsEachElementOnOneSourceLine() {
+function TestSignInWrapsWideElementsAndKeepsEscapedValuesInline() {
   const source = readSource('src/pages/SignIn.ts');
 
+  // No source line scrolls sideways: 100 columns is the widest any line gets
+  // (the old input lines were well over 200).
+  const MAX_SOURCE_WIDTH = 100;
+  for (const [index, line] of source.split('\n').entries()) {
+    assert.ok(
+      line.length <= MAX_SOURCE_WIDTH,
+      `src/pages/SignIn.ts line ${index + 1} is ${line.length} characters wide (max ${MAX_SOURCE_WIDTH}): wrap its attributes instead`,
+    );
+  }
+
+  // The value attributes are still escaped inline, on the attribute they
+  // escape, so an attribute breakout is read where it happens — and never
+  // patched together with `+`.
+  assert.equal(
+    (source.match(/value="\$\{escapeHtml\([^)]*\)\}"/g) ?? []).length,
+    2,
+    'both inputs escape their value inline: value="${escapeHtml(...)}"',
+  );
   assert.ok(
     !/['"`]\s*\+\s*escapeHtml\(|escapeHtml\([^)]*\)\s*\+\s*['"`]/.test(source),
-    'escaped values are interpolated into the element string instead of concatenated onto it',
+    'escaped values are interpolated into the attribute instead of concatenated onto it',
   );
 
-  // An element split over several lines leaves the line that opens it without
-  // its closing `>`, so every markup line has to carry balanced angle brackets.
-  // Lines without markup are skipped (an arrow function's `=>` is not a tag).
-  const lines = source.split('\n');
-  const markupLines = lines
-    .map((line, index) => ({ line, number: index + 1 }))
-    .filter(({ line }) => /<[a-zA-Z/]/.test(line));
-  assert.ok(markupLines.length >= 8, 'the page builds its markup from one-line element strings');
-
-  for (const { line, number } of markupLines) {
-    const opens = (line.match(/</g) ?? []).length;
-    const closes = (line.match(/>/g) ?? []).length;
-    assert.equal(
-      opens,
-      closes,
-      `line ${number} splinters one element across source lines: ${line.trim()}`,
+  // The rendered inputs wrap too: `<input`, one complete attribute per line,
+  // then the closing `>`.
+  const htmlLines = SignIn().split('\n');
+  const singleAttribute = /^\s+[a-z-]+(?:="[^"]*")?$/;
+  const inputBlocks: Array<{ line: number; block: string[] }> = [];
+  for (const [index, line] of htmlLines.entries()) {
+    if (line.trim() !== '<input') {
+      continue;
+    }
+    const end = htmlLines.findIndex(
+      (candidate, at) => at > index && candidate.trim() === '>',
     );
+    assert.notEqual(end, -1, `the input opened at line ${index + 1} closes its open tag`);
+    inputBlocks.push({ line: index + 1, block: htmlLines.slice(index, end + 1) });
   }
 
-  // The two value attributes under test are each written on their own line,
-  // escaped in place, so an attribute breakout is readable at a glance.
-  const inputLines = lines.filter((line) => line.includes('<input'));
-  assert.equal(inputLines.length, 2, 'the email and password inputs are one-line elements');
-  for (const line of inputLines) {
-    assert.match(
-      line,
-      /value="\$\{escapeHtml\([^)]*\)\}"/,
-      'the input value attribute stays on the element line, escaped in place',
+  assert.equal(inputBlocks.length, 2, 'the page renders the email and password inputs');
+  for (const { line, block } of inputBlocks) {
+    assert.ok(
+      block.length >= 5,
+      `the input at line ${line} wraps its attributes instead of packing them onto one line`,
     );
+    for (const [offset, attribute] of block.slice(1, -1).entries()) {
+      assert.match(
+        attribute,
+        singleAttribute,
+        `input line ${line + offset + 1} holds one complete attribute: ${attribute.trim()}`,
+      );
+    }
+    const values = block.filter((attribute) => /^\s+value="[^"]*"$/.test(attribute));
+    assert.equal(values.length, 1, `the input at line ${line} carries exactly one value attribute`);
   }
+
+  // Wrapping must not have moved the escaping: the rendered value is still the
+  // escaped string, on its own attribute line.
+  const escaped = SignIn({ values: { email: '"><script>alert(1)</script>' } });
+  assert.ok(
+    escaped.includes('          value="&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"'),
+    'the rendered value attribute is escaped in place on its own line',
+  );
+  assert.ok(
+    !/<input\b[^>]*\bvalue="[^"]*"[^>]*\brequired\b/.test(escaped),
+    'the value and the rest of the attributes do not share a single line',
+  );
 }
 
 /* ------------------------------------------------------------------ *
@@ -540,4 +572,7 @@ test(
 test('TestSignInPageTracksTheMobileViewport', TestSignInPageTracksTheMobileViewport);
 test('TestSignInLayoutStaysMobileFirst', TestSignInLayoutStaysMobileFirst);
 test('TestSignInEmptyStateEscapesItsContent', TestSignInEmptyStateEscapesItsContent);
-test('TestSignInKeepsEachElementOnOneSourceLine', TestSignInKeepsEachElementOnOneSourceLine);
+test(
+  'TestSignInWrapsWideElementsAndKeepsEscapedValuesInline',
+  TestSignInWrapsWideElementsAndKeepsEscapedValuesInline,
+);

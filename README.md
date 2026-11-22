@@ -48,3 +48,10 @@ third-party packages.
   fallback) so mobile browser chrome cannot make it overflow. The focus ring is
   declared only for the controls the surface actually renders — the sign-in page
   has no links, so an `a:focus-visible` rule would be dead CSS.
+- Markup stays readable in a diff: short elements sit on one source line, wide
+  elements (the email and password inputs) wrap with one complete attribute per
+  line via the `openTag`/`indent` helpers in `src/pages/SignIn.ts`, and an
+  interpolated value stays inline with the attribute it belongs to —
+  `value="${escapeHtml(...)}"` — never concatenated from `+` pieces. Keep new
+  elements on the same convention: no source line over 100 columns, no attribute
+  split across lines.

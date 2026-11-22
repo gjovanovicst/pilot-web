@@ -6,6 +6,19 @@ import { join, relative } from 'node:path';
 
 import { SignIn } from './SignIn.ts';
 import { DEMO_CREDENTIALS } from '../constants/demoCredentials.ts';
+import {
+  accessibleDescription,
+  accessibleName,
+  attribute,
+  descriptionEntries,
+  findAll,
+  getAllByLabelText,
+  parseHtml,
+  queryByRole,
+  textContent,
+  walk,
+  type DomElement,
+} from '../lib/dom.ts';
 
 /* ------------------------------------------------------------------ *
  * helpers
@@ -139,26 +152,31 @@ function nonTokenSources(dir = join(repoRoot, 'src')): Array<{ path: string; con
   return sources;
 }
 
-function emptyStateMarkup(html: string): string | null {
-  const start = html.indexOf('<section class="empty-state">');
-  if (start === -1) {
-    return null;
-  }
-  const end = html.indexOf('</section>', start);
-  return end === -1 ? null : html.slice(start, end + '</section>'.length);
+/**
+ * Review fix: the tests used to hand-roll an HTML parser over fixed markup
+ * shapes — matching the exact `<section class="empty-state">`, the
+ * `>Email</dt> <dd…` pair and each `<input … value="…">` — so adding a class, an
+ * attribute or a wrapper broke the suite although the page behaved the same.
+ * The page is now parsed once into a tree and read through its semantics: the
+ * named landmark the empty state exposes, the control a label names, and the
+ * value a definition list pairs with its term. None of those depend on class
+ * names, ids or element order.
+ */
+
+/** The rendered empty state: the page's named section, or null when there is none. */
+function emptyStateOf(markup: string): DomElement | null {
+  return queryByRole(parseHtml(markup), 'region');
 }
 
-/** Reads one attribute value off a rendered `<input>`; layout independent. */
-function attributeValue(attributes: string, name: string): string | undefined {
-  return attributes.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1];
+/** An attribute as the page rendered it; a bare attribute reads as `''`. */
+function attributeValue(element: DomElement, name: string): string | undefined {
+  return attribute(element, name);
 }
 
-/** The attributes of the `<input id="...">` the page renders, by id. */
-function renderedInput(html: string, id: string): string {
-  const matches = [...html.matchAll(/<input\b([^>]*)>/g)]
-    .map((match) => match[1])
-    .filter((attributes) => attributeValue(attributes, 'id') === id);
-  assert.equal(matches.length, 1, `the page renders exactly one "${id}" input`);
+/** The control the page labels with `label`, e.g. the field named "Email". */
+function renderedInput(markup: string, label: string): DomElement {
+  const matches = getAllByLabelText(parseHtml(markup), label);
+  assert.equal(matches.length, 1, `the page renders exactly one "${label}" field`);
   return matches[0];
 }
 
@@ -180,28 +198,28 @@ const DESIGN_SYSTEM_V1: Record<string, string> = {
 
 /** AC1: on load the empty state names the demo credentials. */
 function TestSignInShowsTheEmptyState() {
-  const html = SignIn(); // the page as it renders on load, before any interaction
-  const emptyState = emptyStateMarkup(html);
+  const markup = SignIn(); // the page as it renders on load, before any interaction
+  const tree = parseHtml(markup);
+  const emptyState = queryByRole(tree, 'region');
 
   assert.ok(emptyState, 'the sign-in page renders an empty state on load');
 
-  assert.match(emptyState, /class="empty-state__title"/, 'the empty state has a title');
-  assert.match(
-    emptyState,
-    /class="empty-state__description"/,
+  assert.ok(queryByRole(emptyState, 'heading'), 'the empty state has a title');
+  assert.ok(
+    accessibleDescription(tree, emptyState).length > 0,
     'the empty state explains why it is empty',
   );
 
+  const text = textContent(emptyState);
   assert.ok(
-    emptyState.includes(DEMO_CREDENTIALS.email),
+    text.includes(DEMO_CREDENTIALS.email),
     `the empty state names the demo email (${DEMO_CREDENTIALS.email})`,
   );
-  assert.ok(
-    emptyState.includes(DEMO_CREDENTIALS.password),
-    'the empty state names the demo password',
-  );
-  assert.match(emptyState, /<dt class="credentials__term">Email<\/dt>/, 'email is named');
-  assert.match(emptyState, /<dt class="credentials__term">Password<\/dt>/, 'password is named');
+  assert.ok(text.includes(DEMO_CREDENTIALS.password), 'the empty state names the demo password');
+
+  const terms = descriptionEntries(emptyState).map((entry) => entry.term);
+  assert.ok(terms.includes('Email'), 'email is named');
+  assert.ok(terms.includes('Password'), 'password is named');
 
   // The credentials are also the single source of truth used by the form.
   assert.equal(DEMO_CREDENTIALS.email, 'demo@pilot.example');
@@ -252,11 +270,21 @@ function TestSignInEmptyStateUsesDesignTokens() {
   }
 
   // The empty state carries no inline colours either.
-  const emptyState = emptyStateMarkup(SignIn());
+  const tree = parseHtml(SignIn());
+  const emptyState = queryByRole(tree, 'region');
   assert.ok(emptyState);
-  assert.ok(!/\sstyle="/.test(emptyState), 'the empty state does not use inline styles');
+  for (const element of walk(emptyState)) {
+    assert.ok(
+      !attributeValue(element, 'style'),
+      'the empty state does not use inline styles',
+    );
+  }
+  const rendered = [
+    textContent(emptyState),
+    ...walk(emptyState).flatMap((element) => Object.values(element.attrs)),
+  ].join(' ');
   assert.ok(
-    !RAW_COLOR.test(emptyState.replace(/var\([^)]*\)/g, '')),
+    !RAW_COLOR.test(rendered.replace(/var\([^)]*\)/g, '')),
     'the rendered empty state contains no raw colours',
   );
 }
@@ -292,37 +320,39 @@ function TestSignInColoursMeetWcagAaContrast() {
 }
 
 function TestSignInHidesTheEmptyStateOnceTheFormIsInUse() {
-  assert.ok(emptyStateMarkup(SignIn({ touched: true })) === null, 'no empty state once touched');
+  assert.ok(emptyStateOf(SignIn({ touched: true })) === null, 'no empty state once touched');
   assert.ok(
-    emptyStateMarkup(SignIn({ values: { email: 'someone@example.com' } })) === null,
+    emptyStateOf(SignIn({ values: { email: 'someone@example.com' } })) === null,
     'no empty state once the form holds a value',
   );
   assert.ok(
-    emptyStateMarkup(SignIn({ values: { email: ' ', password: ' ' } })) !== null,
+    emptyStateOf(SignIn({ values: { email: ' ', password: ' ' } })) !== null,
     'blank values keep the empty state',
   );
 }
 
 function TestSignInFormControlsAreLabelledAndFocusable() {
-  const html = SignIn({ touched: true });
+  const markup = SignIn({ touched: true });
+  const tree = parseHtml(markup);
 
-  const inputIds = [...html.matchAll(/<input\b[^>]*\bid="([^"]+)"/g)].map((match) => match[1]);
-  assert.ok(inputIds.length >= 2, 'the form has email and password inputs');
-  for (const id of inputIds) {
-    assert.ok(
-      html.includes(`<label class="field__label" for="${id}">`),
-      `input "${id}" has an associated label`,
-    );
+  const inputs = findAll(tree, (element) => element.tag === 'input');
+  assert.ok(inputs.length >= 2, 'the form has email and password inputs');
+  for (const input of inputs) {
+    assert.ok(accessibleName(tree, input).length > 0, 'every input has an associated label');
   }
-  assert.match(html, /<input[^>]*id="sign-in-email"[^>]*type="email"/);
-  assert.match(html, /<input[^>]*id="sign-in-password"[^>]*type="password"/);
-  assert.match(html, /autocomplete="username"/);
-  assert.match(html, /autocomplete="current-password"/);
 
-  for (const match of html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)) {
-    const accessibleName = match[2].replace(/<[^>]*>/g, '').trim();
+  const email = renderedInput(markup, 'Email');
+  const password = renderedInput(markup, 'Password');
+  assert.equal(attributeValue(email, 'type'), 'email');
+  assert.equal(attributeValue(password, 'type'), 'password');
+  assert.equal(attributeValue(email, 'autocomplete'), 'username');
+  assert.equal(attributeValue(password, 'autocomplete'), 'current-password');
+
+  const buttons = findAll(tree, (element) => element.tag === 'button');
+  assert.ok(buttons.length > 0, 'the form has a button');
+  for (const button of buttons) {
     assert.ok(
-      accessibleName.length > 0 || /aria-label="[^"]+"/.test(match[1]),
+      accessibleName(tree, button).length > 0,
       'every button has an accessible name (text or aria-label)',
     );
   }
@@ -343,9 +373,7 @@ function TestSignInFormControlsAreLabelledAndFocusable() {
   // renders: every rendered control gets a ring, and no rule targets an element
   // that never renders (the sign-in page has no links, so an `a:focus-visible`
   // rule would be dead CSS).
-  const renderedTags = new Set(
-    [...html.matchAll(/<([a-z][a-z0-9]*)\b/g)].map((match) => match[1].toLowerCase()),
-  );
+  const renderedTags = new Set(walk(tree).map((element) => element.tag));
   const focusSelectors = focusRules.flatMap((rule) => rule.selectors).join(', ');
   for (const control of ['a', 'button', 'input', 'select', 'textarea']) {
     const renders = renderedTags.has(control);
@@ -483,12 +511,27 @@ function TestSignInLayoutStaysMobileFirst() {
 }
 
 function TestSignInEmptyStateEscapesItsContent() {
-  const html = SignIn({ values: { email: '"><script>alert(1)</script>' } });
-  assert.ok(!html.includes('<script>'), 'user input never reaches the page as markup');
-  assert.ok(html.includes('&quot;&gt;&lt;script&gt;'), 'the input value is escaped');
+  const markup = SignIn({ values: { email: '"><script>alert(1)</script>' } });
+  assert.ok(!markup.includes('<script>'), 'user input never reaches the page as markup');
+  assert.ok(markup.includes('&quot;&gt;&lt;script&gt;'), 'the input value is escaped');
+  assert.deepEqual(
+    findAll(parseHtml(markup), (element) => element.tag === 'script'),
+    [],
+    'the hostile value adds no element to the parsed page',
+  );
+  assert.equal(
+    attributeValue(renderedInput(markup, 'Email'), 'value'),
+    '"><script>alert(1)</script>',
+    'the escaped value reads back as the string the user typed',
+  );
 
   const withError = SignIn({ error: '<img src=x onerror=alert(1)>' });
   assert.ok(!withError.includes('<img'), 'error messages are escaped');
+  assert.deepEqual(
+    findAll(parseHtml(withError), (element) => element.tag === 'img'),
+    [],
+    'the error message adds no element to the parsed page',
+  );
 }
 
 /**
@@ -498,15 +541,14 @@ function TestSignInEmptyStateEscapesItsContent() {
  * field, a hidden CSRF input, a long but valid line) with no behavioural
  * regression, so those rules moved to the formatter: `.prettierrc.json` pins
  * `printWidth: 100` and `singleAttributePerLine: true`. What remains here is
- * what a formatter cannot check — the rendered structure of the credential
- * inputs and the escaping of the values they carry — asserted independently of
- * how the markup source happens to be wrapped, and without pinning the page to
- * a fixed number of inputs.
+ * what a formatter cannot check — the controls the page labels, the attributes
+ * a credential field needs, and the escaping of the values they carry —
+ * asserted through the parsed page, so reflowing the markup changes nothing.
  */
 function TestSignInRendersInputsWithEscapedValues() {
-  const html = SignIn();
+  const markup = SignIn();
 
-  const email = renderedInput(html, 'sign-in-email');
+  const email = renderedInput(markup, 'Email');
   assert.equal(attributeValue(email, 'type'), 'email');
   assert.equal(attributeValue(email, 'name'), 'email');
   assert.equal(attributeValue(email, 'autocomplete'), 'username');
@@ -514,44 +556,52 @@ function TestSignInRendersInputsWithEscapedValues() {
   // that is valid HTML for an empty field — so this asserts "blank", not an
   // explicit `value=""`, and never pins the implementation's markup.
   assert.ok(!attributeValue(email, 'value'), 'the untouched form starts blank');
-  assert.match(email, /\brequired\b/, 'the email input is required');
+  assert.notEqual(attributeValue(email, 'required'), undefined, 'the email input is required');
 
-  const password = renderedInput(html, 'sign-in-password');
+  const password = renderedInput(markup, 'Password');
   assert.equal(attributeValue(password, 'type'), 'password');
   assert.equal(attributeValue(password, 'name'), 'password');
   assert.equal(attributeValue(password, 'autocomplete'), 'current-password');
   // Review fix: same here: an absent `value` attribute is an empty password.
   assert.ok(!attributeValue(password, 'value'), 'the untouched form starts blank');
-  assert.match(password, /\brequired\b/, 'the password input is required');
+  assert.notEqual(attributeValue(password, 'required'), undefined, 'the password input is required');
 
   // A supplied value survives into the rendered attribute.
-  const filled = renderedInput(SignIn({ values: { email: 'someone@example.com' } }), 'sign-in-email');
+  const filled = renderedInput(SignIn({ values: { email: 'someone@example.com' } }), 'Email');
   assert.equal(attributeValue(filled, 'value'), 'someone@example.com');
 
   // A hostile value is escaped in place: it cannot break out of the attribute
   // or add markup of its own.
-  const inputsOnLoad = (rendered: string) => [...rendered.matchAll(/<input\b/g)].length;
+  const inputsOnLoad = (rendered: string) =>
+    findAll(parseHtml(rendered), (element) => element.tag === 'input').length;
   const hostile = '"><script>alert(1)</script>';
   const escaped = SignIn({ values: { email: hostile, password: 'p"w<d>' } });
 
   assert.equal(
     inputsOnLoad(escaped),
-    inputsOnLoad(html),
+    inputsOnLoad(markup),
     'an escaped value does not inject a new input',
   );
   assert.ok(!escaped.includes('<script>'), 'the escaped value never becomes markup');
 
-  const escapedEmail = renderedInput(escaped, 'sign-in-email');
-  assert.equal(
-    attributeValue(escapedEmail, 'value'),
-    '&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;',
+  const escapedEmail = renderedInput(escaped, 'Email');
+  assert.ok(
+    escaped.includes('&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;'),
     'the value is escaped inside the attribute it belongs to',
   );
-  assert.equal(attributeValue(escapedEmail, 'type'), 'email', 'the value adds no attribute');
   assert.equal(
-    attributeValue(renderedInput(escaped, 'sign-in-password'), 'value'),
-    'p&quot;w&lt;d&gt;',
-    'the password value is escaped the same way',
+    attributeValue(escapedEmail, 'value'),
+    hostile,
+    'the escaped attribute reads back as the value the user typed',
+  );
+  assert.equal(attributeValue(escapedEmail, 'type'), 'email', 'the value adds no attribute');
+
+  const escapedPassword = renderedInput(escaped, 'Password');
+  assert.ok(escaped.includes('p&quot;w&lt;d&gt;'), 'the password value is escaped the same way');
+  assert.equal(
+    attributeValue(escapedPassword, 'value'),
+    'p"w<d>',
+    'the escaped password reads back as the value the user typed',
   );
 }
 

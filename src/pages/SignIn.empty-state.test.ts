@@ -7,18 +7,37 @@ import { join } from 'node:path';
 import { SignIn } from './SignIn.ts';
 import { EmptyState } from '../components/EmptyState.ts';
 import { DEMO_CREDENTIALS } from '../constants/demoCredentials.ts';
+import {
+  accessibleDescription,
+  accessibleName,
+  attribute,
+  descriptionEntries,
+  findAll,
+  getAllByLabelText,
+  parseHtml,
+  queryByRole,
+  textContent,
+  type DomElement,
+} from '../lib/dom.ts';
 
 /* ------------------------------------------------------------------ *
  * T-1 — sign in with an empty state: the behaviour under review
  *
  * The required behaviour has two halves, and both are asserted here:
  *   1. an untouched form renders an empty state that *names* the demo
- *      email and the demo password (each value bound to its own label);
+ *      email and the demo password (each value bound to its own term);
  *   2. the empty state is suppressed as soon as either credential is
  *      supplied, so it never hides a form the user is filling in.
  *
- * The tests read the rendered markup only — never the source layout — so a
- * reformatted or extended page keeps them green.
+ * Review fix: the tests used to hand-roll an HTML parser over fixed markup
+ * shapes — matching the exact `<section class="empty-state">`, the
+ * `>Email</dt> <dd…` pair and each `<input … value="…">` by its internal id — so
+ * adding a class, an attribute or a wrapper broke the suite although the page
+ * behaved the same. Each page is now parsed once and read through its
+ * semantics: the named landmark the empty state exposes, the control a label
+ * names, and the value a definition list pairs with its term. None of those
+ * depend on class names, ids or element order, so the assertions below fail
+ * only when the behaviour changes.
  * ------------------------------------------------------------------ */
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -27,52 +46,53 @@ function readSource(path: string): string {
   return readFileSync(join(repoRoot, path), 'utf8');
 }
 
-/** The rendered `<section class="empty-state">…</section>`, or null. */
-function emptyStateMarkup(html: string): string | null {
-  const start = html.indexOf('<section class="empty-state">');
-  if (start === -1) {
-    return null;
-  }
-  const end = html.indexOf('</section>', start);
-  return end === -1 ? null : html.slice(start, end + '</section>'.length);
+/** Normalised text of a subtree, so indentation never affects a comparison. */
+function textOf(node: DomElement): string {
+  return textContent(node).replace(/\s+/g, ' ').trim();
+}
+
+/** The rendered empty state: the page's named section, or null when there is none. */
+function emptyStateOf(markup: string): DomElement | null {
+  return queryByRole(parseHtml(markup), 'region');
 }
 
 /**
- * The value a rendered definition list pairs with a term, e.g. the email shown
- * next to "Email". Returns undefined when the pair is missing, so a credential
- * that floats somewhere else in the markup does not count as "named".
+ * The value the empty state shows for a term, e.g. the email shown next to
+ * "Email". Returns undefined when the pair is missing, so a credential that
+ * floats somewhere else in the page does not count as "named".
  */
-function credentialValue(markup: string, term: string): string | undefined {
-  const pattern = new RegExp(
-    `>${term}<\\/dt>\\s*<dd[^>]*>([\\s\\S]*?)<\\/dd>`,
-    'i',
-  );
-  return markup.match(pattern)?.[1]?.trim();
+function credentialValue(emptyState: DomElement, term: string): string | undefined {
+  return descriptionEntries(emptyState).find(
+    (entry) => entry.term.toLowerCase() === term.toLowerCase(),
+  )?.value;
 }
 
-/** Every `value="…"` a rendered input carries, by input id. */
-function inputValue(html: string, id: string): string | undefined {
-  const input = [...html.matchAll(/<input\b([^>]*)>/g)]
-    .map((match) => match[1])
-    .filter((attributes) => new RegExp(`\\bid="${id}"`).test(attributes));
-  assert.equal(input.length, 1, `the page renders exactly one "${id}" input`);
-  return input[0].match(/\bvalue="([^"]*)"/)?.[1];
+/** The control the page labels with `label`, e.g. the field named "Email". */
+function inputLabelled(markup: string, label: string): DomElement {
+  const matches = getAllByLabelText(parseHtml(markup), label);
+  assert.equal(matches.length, 1, `the page renders exactly one "${label}" field`);
+  return matches[0];
+}
+
+/** The value a rendered control carries; undefined when it carries none. */
+function inputValue(markup: string, label: string): string | undefined {
+  return attribute(inputLabelled(markup, label), 'value');
 }
 
 /**
  * AC1, first half: on load — no state, no touched flag, no values — the page
- * renders the empty state and it names both demo credentials, each value
- * paired with the label that identifies it.
+ * renders the empty state and it names both demo credentials, each value paired
+ * with the term that identifies it.
  */
 function TestSignInEmptyStateNamesTheDemoCredentials() {
-  const html = SignIn(); // the page exactly as it renders on load
-  const emptyState = emptyStateMarkup(html);
+  const markup = SignIn(); // the page exactly as it renders on load
+  const tree = parseHtml(markup);
+  const emptyState = queryByRole(tree, 'region');
 
   assert.ok(emptyState, 'an untouched form renders the empty state instead of a blank surface');
-  assert.match(emptyState, /class="empty-state__title"/, 'the empty state has a title');
-  assert.match(
-    emptyState,
-    /class="empty-state__description"/,
+  assert.ok(queryByRole(emptyState, 'heading'), 'the empty state has a title');
+  assert.ok(
+    accessibleDescription(tree, emptyState).length > 0,
     'the empty state explains why it is empty',
   );
 
@@ -82,7 +102,7 @@ function TestSignInEmptyStateNamesTheDemoCredentials() {
   assert.ok(DEMO_CREDENTIALS.password.length >= 8, 'the demo password is a usable password');
 
   // Named: the demo email sits next to "Email", the demo password next to
-  // "Password". A credential rendered without its label would fail here.
+  // "Password". A credential rendered without its term would fail here.
   assert.equal(
     credentialValue(emptyState, 'Email'),
     DEMO_CREDENTIALS.email,
@@ -94,10 +114,22 @@ function TestSignInEmptyStateNamesTheDemoCredentials() {
     'the empty state names the demo password',
   );
 
+  // Not merely present: each field is described by the hint, so a screen reader
+  // user hears the demo credentials when they focus the field.
+  const described = accessibleDescription(tree, inputLabelled(markup, 'Email'));
+  assert.ok(
+    described.includes(DEMO_CREDENTIALS.email),
+    'the email field is described by the demo email',
+  );
+  assert.ok(
+    described.includes(DEMO_CREDENTIALS.password),
+    'the demo password reaches the field description too',
+  );
+
   // The empty state is the only thing that names the account: the form itself
   // still starts blank, so the page never pretends the user typed anything.
-  assert.ok(!inputValue(html, 'sign-in-email'), 'the email input starts blank');
-  assert.ok(!inputValue(html, 'sign-in-password'), 'the password input starts blank');
+  assert.ok(!inputValue(markup, 'Email'), 'the email input starts blank');
+  assert.ok(!inputValue(markup, 'Password'), 'the password input starts blank');
 }
 
 /**
@@ -117,7 +149,7 @@ function TestSignInEmptyStateIsSuppressedOnceCredentialsAreSupplied() {
 
   for (const [why, state] of cases) {
     assert.equal(
-      emptyStateMarkup(SignIn(state)),
+      emptyStateOf(SignIn(state)),
       null,
       `the empty state is suppressed once ${why}`,
     );
@@ -127,20 +159,27 @@ function TestSignInEmptyStateIsSuppressedOnceCredentialsAreSupplied() {
   const filled = SignIn({
     values: { email: 'someone@example.com', password: 'hunter2hunter2' },
   });
-  assert.equal(inputValue(filled, 'sign-in-email'), 'someone@example.com');
-  assert.equal(inputValue(filled, 'sign-in-password'), 'hunter2hunter2');
+  assert.equal(inputValue(filled, 'Email'), 'someone@example.com');
+  assert.equal(inputValue(filled, 'Password'), 'hunter2hunter2');
   assert.ok(!filled.includes(DEMO_CREDENTIALS.password), 'typed values replace the demo hint');
+
+  // Once the hint is gone, nothing still describes the fields with it.
+  const filledTree = parseHtml(filled);
+  assert.equal(
+    accessibleDescription(filledTree, inputLabelled(filled, 'Email')),
+    '',
+    'the suppressed hint leaves no dangling description behind',
+  );
 }
 
 /** Blank and whitespace-only values are not in use: the empty state stays. */
 function TestSignInKeepsTheEmptyStateWhileTheFormIsBlank() {
-  assert.equal(
-    emptyStateMarkup(SignIn({ values: {} })),
-    emptyStateMarkup(SignIn()),
-    'no values renders the same empty state as the load state',
-  );
+  const withoutValues = emptyStateOf(SignIn({ values: {} }));
+  const onLoad = emptyStateOf(SignIn());
+  assert.ok(onLoad && withoutValues);
+  assert.equal(textOf(withoutValues), textOf(onLoad), 'no values renders the same empty state');
   assert.ok(
-    emptyStateMarkup(SignIn({ values: { email: ' ', password: '\t' } })) !== null,
+    emptyStateOf(SignIn({ values: { email: ' ', password: '\t' } })) !== null,
     'whitespace-only values keep the empty state',
   );
 }
@@ -154,10 +193,30 @@ function TestEmptyStateRendersAndEscapesItsContent() {
     title: 'Nothing here yet',
     description: 'Add the first item.',
   });
-  assert.match(markup, /^<section class="empty-state">/);
-  assert.match(markup, /<h2 class="empty-state__title">Nothing here yet<\/h2>/);
-  assert.match(markup, /<p class="empty-state__description">Add the first item\.<\/p>/);
-  assert.ok(!markup.includes('empty-state__extra'), 'no extra block without children');
+  const tree = parseHtml(markup);
+  const emptyState = queryByRole(tree, 'region');
+
+  assert.ok(emptyState, 'the component renders an empty state on its own');
+  assert.equal(
+    tree.children.filter((child) => child.kind === 'element').length,
+    1,
+    'the empty state is the whole render, not a fragment of one',
+  );
+  assert.equal(
+    accessibleName(tree, emptyState),
+    'Nothing here yet',
+    'the title names the empty state',
+  );
+  assert.equal(
+    accessibleDescription(tree, emptyState),
+    'Add the first item.',
+    'the description explains the empty state',
+  );
+  assert.equal(
+    textOf(emptyState),
+    'Nothing here yet Add the first item.',
+    'nothing else is rendered when there is no extra content',
+  );
 
   const escaped = EmptyState({
     title: '<script>alert(1)</script>',
@@ -166,6 +225,25 @@ function TestEmptyStateRendersAndEscapesItsContent() {
   assert.ok(!escaped.includes('<script>'), 'the title is escaped');
   assert.match(escaped, /&lt;script&gt;/);
   assert.match(escaped, /a &amp; b/, 'the description is escaped');
+
+  const escapedTree = parseHtml(escaped);
+  const escapedState = queryByRole(escapedTree, 'region');
+  assert.ok(escapedState);
+  assert.deepEqual(
+    findAll(escapedTree, (element) => element.tag === 'script'),
+    [],
+    'the hostile title adds no element to the parsed page',
+  );
+  assert.equal(
+    accessibleName(escapedTree, escapedState),
+    '<script>alert(1)</script>',
+    'the title reads back as the text that was given',
+  );
+  assert.equal(
+    accessibleDescription(escapedTree, escapedState),
+    'a & b',
+    'the description reads back as the text that was given',
+  );
 }
 
 /**

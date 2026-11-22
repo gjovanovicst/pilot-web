@@ -6,6 +6,16 @@ export const SIGN_IN_EMPTY_STATE_TITLE = 'Sign in with the demo account';
 export const SIGN_IN_EMPTY_STATE_DESCRIPTION =
   'The form starts empty. Use the demo credentials below to explore the pilot.';
 
+/** Id base of the empty state's title and description. */
+export const SIGN_IN_EMPTY_STATE_ID = 'sign-in-empty-state';
+
+/**
+ * Id of the demo-credentials hint. While it renders, both fields are described
+ * by it, so the credentials reach a screen-reader user instead of only sighted
+ * ones.
+ */
+export const DEMO_CREDENTIALS_HINT_ID = 'sign-in-demo-credentials';
+
 export type SignInValues = {
   email: string;
   password: string;
@@ -32,7 +42,7 @@ export function isUntouched(state: SignInState = {}): boolean {
  *
  * Elements are built from whole lines: an open tag, then one attribute per
  * line, then the closing `>`. A wide element — the email and password inputs
- * carry seven attributes each — therefore never becomes a 200-character ribbon
+ * carry eight attributes each — therefore never becomes a 200-character ribbon
  * that scrolls sideways in a diff viewer, while an interpolated value still
  * stays inline with the attribute it belongs to, `value="${escapeHtml(...)}"`,
  * so the escaping and any attribute breakout are read exactly where they
@@ -58,30 +68,44 @@ type FieldOptions = {
   autocomplete: string;
   /** The raw value: escaped in place on the `value` attribute line. */
   value: string;
+  /** Id of the hint that describes the field, when the hint is on the page. */
+  describedBy?: string;
 };
 
 /** A label with its input; the input's attributes wrap one per line. */
-function renderField({ id, label, name, type, autocomplete, value }: FieldOptions): string[] {
+function renderField({
+  id,
+  label,
+  name,
+  type,
+  autocomplete,
+  value,
+  describedBy,
+}: FieldOptions): string[] {
+  const attributes = [
+    'class="field__input"',
+    `id="${id}"`,
+    `name="${name}"`,
+    `type="${type}"`,
+    `autocomplete="${autocomplete}"`,
+  ];
+  if (describedBy) {
+    attributes.push(`aria-describedby="${describedBy}"`);
+  }
+  attributes.push('required', `value="${escapeHtml(value)}"`);
+
   return [
     '<div class="field">',
     ...indent([
       `<label class="field__label" for="${id}">${label}</label>`,
-      ...openTag('input', [
-        'class="field__input"',
-        `id="${id}"`,
-        `name="${name}"`,
-        `type="${type}"`,
-        `autocomplete="${autocomplete}"`,
-        'required',
-        `value="${escapeHtml(value)}"`,
-      ]),
+      ...openTag('input', attributes),
     ]),
     '</div>',
   ];
 }
 
 /** The sign-in form: one labelled field per credential, then the action. */
-function renderForm(values: Partial<SignInValues>): string[] {
+function renderForm(values: Partial<SignInValues>, describedBy?: string): string[] {
   return [
     ...openTag('form', [
       'class="sign-in__form"',
@@ -98,6 +122,7 @@ function renderForm(values: Partial<SignInValues>): string[] {
         type: 'email',
         autocomplete: 'username',
         value: values.email ?? '',
+        describedBy,
       }),
     ),
     ...indent(
@@ -108,6 +133,7 @@ function renderForm(values: Partial<SignInValues>): string[] {
         type: 'password',
         autocomplete: 'current-password',
         value: values.password ?? '',
+        describedBy,
       }),
     ),
     '  <button class="button button--primary" type="submit">Sign in</button>',
@@ -117,11 +143,13 @@ function renderForm(values: Partial<SignInValues>): string[] {
 
 /**
  * The credential list is compact: every element is short enough to sit on one
- * source line, with the escaped value interpolated in place.
+ * source line, with the escaped value interpolated in place. The `dt`/`dd`
+ * pairs are what names each credential: a value on its own would not tell the
+ * user which credential it is.
  */
 function renderDemoCredentials(): string {
   return [
-    '<dl class="credentials">',
+    `<dl class="credentials" id="${DEMO_CREDENTIALS_HINT_ID}">`,
     '  <dt class="credentials__term">Email</dt>',
     `  <dd class="credentials__value">${escapeHtml(DEMO_CREDENTIALS.email)}</dd>`,
     '  <dt class="credentials__term">Password</dt>',
@@ -136,14 +164,17 @@ function renderDemoCredentials(): string {
  */
 export function SignIn(state: SignInState = {}): string {
   const values = state.values ?? {};
+  const showsHint = isUntouched(state);
+
   const lines: string[] = [
     '<div class="page">',
     '  <main class="sign-in">',
     '    <h1 class="sign-in__heading">Sign in</h1>',
   ];
 
-  if (isUntouched(state)) {
+  if (showsHint) {
     const emptyState = EmptyState({
+      id: SIGN_IN_EMPTY_STATE_ID,
       title: SIGN_IN_EMPTY_STATE_TITLE,
       description: SIGN_IN_EMPTY_STATE_DESCRIPTION,
       children: renderDemoCredentials(),
@@ -156,7 +187,7 @@ export function SignIn(state: SignInState = {}): string {
     lines.push(`    <p class="sign-in__error" role="alert">${message}</p>`);
   }
 
-  lines.push(...indent(renderForm(values), 2));
+  lines.push(...indent(renderForm(values, showsHint ? DEMO_CREDENTIALS_HINT_ID : undefined), 2));
   lines.push('  </main>');
   lines.push('</div>');
 

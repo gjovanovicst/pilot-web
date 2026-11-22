@@ -510,22 +510,26 @@ function TestSignInRendersInputsWithEscapedValues() {
   assert.equal(attributeValue(email, 'type'), 'email');
   assert.equal(attributeValue(email, 'name'), 'email');
   assert.equal(attributeValue(email, 'autocomplete'), 'username');
-  assert.equal(attributeValue(email, 'value'), '', 'the untouched form starts blank');
+  // Review fix: an untouched control may omit its `value` attribute entirely —
+  // that is valid HTML for an empty field — so this asserts "blank", not an
+  // explicit `value=""`, and never pins the implementation's markup.
+  assert.ok(!attributeValue(email, 'value'), 'the untouched form starts blank');
   assert.match(email, /\brequired\b/, 'the email input is required');
 
   const password = renderedInput(html, 'sign-in-password');
   assert.equal(attributeValue(password, 'type'), 'password');
   assert.equal(attributeValue(password, 'name'), 'password');
   assert.equal(attributeValue(password, 'autocomplete'), 'current-password');
-  assert.equal(attributeValue(password, 'value'), '', 'the untouched form starts blank');
+  // Review fix: same here: an absent `value` attribute is an empty password.
+  assert.ok(!attributeValue(password, 'value'), 'the untouched form starts blank');
   assert.match(password, /\brequired\b/, 'the password input is required');
 
-  // A benign value is rendered verbatim in the attribute that carries it.
+  // A supplied value survives into the rendered attribute.
   const filled = renderedInput(SignIn({ values: { email: 'someone@example.com' } }), 'sign-in-email');
   assert.equal(attributeValue(filled, 'value'), 'someone@example.com');
 
-  // A hostile value stays escaped inside its own attribute: it neither closes
-  // the quotes, nor adds an attribute, nor creates new markup.
+  // A hostile value is escaped in place: it cannot break out of the attribute
+  // or add markup of its own.
   const inputsOnLoad = (rendered: string) => [...rendered.matchAll(/<input\b/g)].length;
   const hostile = '"><script>alert(1)</script>';
   const escaped = SignIn({ values: { email: hostile, password: 'p"w<d>' } });

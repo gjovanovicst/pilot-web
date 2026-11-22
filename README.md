@@ -16,6 +16,7 @@ comes from the design-system v1 tokens.
 | `src/components/EmptyState.ts` | The approved empty-state pattern (title, description, optional content). |
 | `src/pages/SignIn.ts` | The sign-in page: empty state while the form is untouched. |
 | `src/pages/SignIn.test.ts` | The acceptance tests for T-1. |
+| `.prettierrc.json` | Markup formatting: 100-column lines, one attribute per line. |
 
 ## Running the tests
 
@@ -25,6 +26,15 @@ pnpm test      # or: npm test
 
 The suite runs on Node's built-in test runner (`node --test`), so it needs no
 third-party packages.
+
+## Formatting
+
+`.prettierrc.json` pins the markup conventions: `printWidth: 100` stops a source
+line from becoming a ribbon that scrolls sideways in a diff viewer, and
+`singleAttributePerLine` keeps a wide element's attributes one per line. Those
+are formatting rules, so they live in the formatter and not in the test suite —
+a third field, a hidden CSRF input or a long but valid line must never fail a
+behavioural test.
 
 ## Notes for the next implementer
 
@@ -52,6 +62,7 @@ third-party packages.
   elements (the email and password inputs) wrap with one complete attribute per
   line via the `openTag`/`indent` helpers in `src/pages/SignIn.ts`, and an
   interpolated value stays inline with the attribute it belongs to —
-  `value="${escapeHtml(...)}"` — never concatenated from `+` pieces. Keep new
-  elements on the same convention: no source line over 100 columns, no attribute
-  split across lines.
+  `value="${escapeHtml(...)}"` — never concatenated from `+` pieces. These are
+  style conventions, enforced by Prettier (see above); the tests assert the
+  rendered structure and the escaping, so they stay green when a legitimate
+  change adds a field or reflows the markup.

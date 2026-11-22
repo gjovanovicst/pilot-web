@@ -148,6 +148,20 @@ function emptyStateMarkup(html: string): string | null {
   return end === -1 ? null : html.slice(start, end + '</section>'.length);
 }
 
+/** Reads one attribute value off a rendered `<input>`; layout independent. */
+function attributeValue(attributes: string, name: string): string | undefined {
+  return attributes.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1];
+}
+
+/** The attributes of the `<input id="...">` the page renders, by id. */
+function renderedInput(html: string, id: string): string {
+  const matches = [...html.matchAll(/<input\b([^>]*)>/g)]
+    .map((match) => match[1])
+    .filter((attributes) => attributeValue(attributes, 'id') === id);
+  assert.equal(matches.length, 1, `the page renders exactly one "${id}" input`);
+  return matches[0];
+}
+
 const DESIGN_SYSTEM_V1: Record<string, string> = {
   '--color-brand': '#4f5eea',
   '--color-bg-canvas': '#fbfbfd',
@@ -283,7 +297,10 @@ function TestSignInHidesTheEmptyStateOnceTheFormIsInUse() {
     emptyStateMarkup(SignIn({ values: { email: 'someone@example.com' } })) === null,
     'no empty state once the form holds a value',
   );
-  assert.ok(emptyStateMarkup(SignIn({ values: { email: ' ', password: ' ' } })) !== null, 'blank values keep the empty state');
+  assert.ok(
+    emptyStateMarkup(SignIn({ values: { email: ' ', password: ' ' } })) !== null,
+    'blank values keep the empty state',
+  );
 }
 
 function TestSignInFormControlsAreLabelledAndFocusable() {
@@ -421,7 +438,10 @@ function TestSignInPageTracksTheMobileViewport() {
   const rules = cssRules(readSource('src/styles/app.css'));
 
   const pageHeights = ruleDeclarations('.page')
-    .filter((declaration) => declaration.property === 'min-height' || declaration.property === 'height')
+    .filter(
+      (declaration) =>
+        declaration.property === 'min-height' || declaration.property === 'height',
+    )
     .map((declaration) => declaration.value);
   assert.ok(pageHeights.length > 0, '.page sets a height');
   assert.equal(
@@ -472,82 +492,62 @@ function TestSignInEmptyStateEscapesItsContent() {
 }
 
 /**
- * Review fix: putting every element on one source line turned the two `<input>`
- * elements into ~230-character ribbons — the "auditable at a glance" goal was
- * defeated by horizontal scrolling in every diff viewer. Wide elements now wrap
- * with one complete attribute per line, while an interpolated value stays inline
- * with the attribute it belongs to (`value="${escapeHtml(...)}"`) instead of
- * being reassembled from `+` pieces: neither extreme.
+ * Review fix: this test used to police the *source* formatting of
+ * `src/pages/SignIn.ts` — every line <= 100 columns, one attribute per line and
+ * exactly two bare `<input` blocks. That failed legitimate changes (a third
+ * field, a hidden CSRF input, a long but valid line) with no behavioural
+ * regression, so those rules moved to the formatter: `.prettierrc.json` pins
+ * `printWidth: 100` and `singleAttributePerLine: true`. What remains here is
+ * what a formatter cannot check — the rendered structure of the credential
+ * inputs and the escaping of the values they carry — asserted independently of
+ * how the markup source happens to be wrapped, and without pinning the page to
+ * a fixed number of inputs.
  */
-function TestSignInWrapsWideElementsAndKeepsEscapedValuesInline() {
-  const source = readSource('src/pages/SignIn.ts');
+function TestSignInRendersInputsWithEscapedValues() {
+  const html = SignIn();
 
-  // No source line scrolls sideways: 100 columns is the widest any line gets
-  // (the old input lines were well over 200).
-  const MAX_SOURCE_WIDTH = 100;
-  for (const [index, line] of source.split('\n').entries()) {
-    assert.ok(
-      line.length <= MAX_SOURCE_WIDTH,
-      `src/pages/SignIn.ts line ${index + 1} is ${line.length} characters wide (max ${MAX_SOURCE_WIDTH}): wrap its attributes instead`,
-    );
-  }
+  const email = renderedInput(html, 'sign-in-email');
+  assert.equal(attributeValue(email, 'type'), 'email');
+  assert.equal(attributeValue(email, 'name'), 'email');
+  assert.equal(attributeValue(email, 'autocomplete'), 'username');
+  assert.equal(attributeValue(email, 'value'), '', 'the untouched form starts blank');
+  assert.match(email, /\brequired\b/, 'the email input is required');
 
-  // The value attributes are still escaped inline, on the attribute they
-  // escape, so an attribute breakout is read where it happens — and never
-  // patched together with `+`.
+  const password = renderedInput(html, 'sign-in-password');
+  assert.equal(attributeValue(password, 'type'), 'password');
+  assert.equal(attributeValue(password, 'name'), 'password');
+  assert.equal(attributeValue(password, 'autocomplete'), 'current-password');
+  assert.equal(attributeValue(password, 'value'), '', 'the untouched form starts blank');
+  assert.match(password, /\brequired\b/, 'the password input is required');
+
+  // A benign value is rendered verbatim in the attribute that carries it.
+  const filled = renderedInput(SignIn({ values: { email: 'someone@example.com' } }), 'sign-in-email');
+  assert.equal(attributeValue(filled, 'value'), 'someone@example.com');
+
+  // A hostile value stays escaped inside its own attribute: it neither closes
+  // the quotes, nor adds an attribute, nor creates new markup.
+  const inputsOnLoad = (rendered: string) => [...rendered.matchAll(/<input\b/g)].length;
+  const hostile = '"><script>alert(1)</script>';
+  const escaped = SignIn({ values: { email: hostile, password: 'p"w<d>' } });
+
   assert.equal(
-    (source.match(/value="\$\{escapeHtml\([^)]*\)\}"/g) ?? []).length,
-    2,
-    'both inputs escape their value inline: value="${escapeHtml(...)}"',
+    inputsOnLoad(escaped),
+    inputsOnLoad(html),
+    'an escaped value does not inject a new input',
   );
-  assert.ok(
-    !/['"`]\s*\+\s*escapeHtml\(|escapeHtml\([^)]*\)\s*\+\s*['"`]/.test(source),
-    'escaped values are interpolated into the attribute instead of concatenated onto it',
+  assert.ok(!escaped.includes('<script>'), 'the escaped value never becomes markup');
+
+  const escapedEmail = renderedInput(escaped, 'sign-in-email');
+  assert.equal(
+    attributeValue(escapedEmail, 'value'),
+    '&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;',
+    'the value is escaped inside the attribute it belongs to',
   );
-
-  // The rendered inputs wrap too: `<input`, one complete attribute per line,
-  // then the closing `>`.
-  const htmlLines = SignIn().split('\n');
-  const singleAttribute = /^\s+[a-z-]+(?:="[^"]*")?$/;
-  const inputBlocks: Array<{ line: number; block: string[] }> = [];
-  for (const [index, line] of htmlLines.entries()) {
-    if (line.trim() !== '<input') {
-      continue;
-    }
-    const end = htmlLines.findIndex(
-      (candidate, at) => at > index && candidate.trim() === '>',
-    );
-    assert.notEqual(end, -1, `the input opened at line ${index + 1} closes its open tag`);
-    inputBlocks.push({ line: index + 1, block: htmlLines.slice(index, end + 1) });
-  }
-
-  assert.equal(inputBlocks.length, 2, 'the page renders the email and password inputs');
-  for (const { line, block } of inputBlocks) {
-    assert.ok(
-      block.length >= 5,
-      `the input at line ${line} wraps its attributes instead of packing them onto one line`,
-    );
-    for (const [offset, attribute] of block.slice(1, -1).entries()) {
-      assert.match(
-        attribute,
-        singleAttribute,
-        `input line ${line + offset + 1} holds one complete attribute: ${attribute.trim()}`,
-      );
-    }
-    const values = block.filter((attribute) => /^\s+value="[^"]*"$/.test(attribute));
-    assert.equal(values.length, 1, `the input at line ${line} carries exactly one value attribute`);
-  }
-
-  // Wrapping must not have moved the escaping: the rendered value is still the
-  // escaped string, on its own attribute line.
-  const escaped = SignIn({ values: { email: '"><script>alert(1)</script>' } });
-  assert.ok(
-    escaped.includes('          value="&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"'),
-    'the rendered value attribute is escaped in place on its own line',
-  );
-  assert.ok(
-    !/<input\b[^>]*\bvalue="[^"]*"[^>]*\brequired\b/.test(escaped),
-    'the value and the rest of the attributes do not share a single line',
+  assert.equal(attributeValue(escapedEmail, 'type'), 'email', 'the value adds no attribute');
+  assert.equal(
+    attributeValue(renderedInput(escaped, 'sign-in-password'), 'value'),
+    'p&quot;w&lt;d&gt;',
+    'the password value is escaped the same way',
   );
 }
 
@@ -572,7 +572,4 @@ test(
 test('TestSignInPageTracksTheMobileViewport', TestSignInPageTracksTheMobileViewport);
 test('TestSignInLayoutStaysMobileFirst', TestSignInLayoutStaysMobileFirst);
 test('TestSignInEmptyStateEscapesItsContent', TestSignInEmptyStateEscapesItsContent);
-test(
-  'TestSignInWrapsWideElementsAndKeepsEscapedValuesInline',
-  TestSignInWrapsWideElementsAndKeepsEscapedValuesInline,
-);
+test('TestSignInRendersInputsWithEscapedValues', TestSignInRendersInputsWithEscapedValues);
